@@ -151,7 +151,7 @@ void main() {
       expect(groupAmountInput('0012345678', 'VND'), '12.345.678');
       expect(groupAmountInput('12a3', 'VND'), '123');
       expect(groupAmountInput('1234567890123456789', 'VND'),
-          '123.456.789.012.345');
+          '12.345.678.901.234');
     });
 
     test('USD dùng dấu phẩy hàng nghìn, tối đa 2 số lẻ', () {

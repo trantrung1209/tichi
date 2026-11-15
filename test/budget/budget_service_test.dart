@@ -148,4 +148,53 @@ void main() {
     expect(() => budgets.setBudget(currencyCode: 'VND', amountMinor: 0),
         throwsFinance('invalid_amount'));
   });
+
+  test('tính đúng tháng 28, 29, 30, 31 ngày; không lẫn tháng bên cạnh', () {
+    budgets.setBudget(
+        categoryId: food, currencyCode: 'VND', amountMinor: 10000000);
+    // Năm thường: tháng 2 có 28 ngày.
+    spend(food, 100, '2027-01-31');
+    spend(food, 200, '2027-02-01');
+    spend(food, 300, '2027-02-28');
+    spend(food, 400, '2027-03-01');
+    // Năm nhuận: tháng 2 có 29 ngày.
+    spend(food, 1000, '2028-02-29');
+    spend(food, 2000, '2028-03-01');
+    // Tháng 30 và 31 ngày.
+    spend(food, 50, '2026-04-30');
+    spend(food, 70, '2026-05-31');
+    int spent(int y, int m) => budgets
+        .statuses(year: y, month: m, currencyCode: 'VND')
+        .firstWhere((s) => s.categoryId == food)
+        .spentMinor;
+    expect(spent(2027, 1), 100);
+    expect(spent(2027, 2), 500);
+    expect(spent(2027, 3), 400);
+    expect(spent(2028, 2), 1000);
+    expect(spent(2028, 3), 2000);
+    expect(spent(2026, 4), 50);
+    expect(spent(2026, 5), 70);
+  });
+
+  test('sửa khoản chi sang tháng khác thì ngân sách tính lại', () {
+    budgets.setBudget(
+        categoryId: food, currencyCode: 'VND', amountMinor: 1000000);
+    final id = core.addExpense(
+        requestId: req(),
+        walletId: bank,
+        amountMinor: 300000,
+        date: '2026-11-05',
+        categoryId: food);
+    core.updateTransaction(id,
+        walletId: bank,
+        amountMinor: 300000,
+        date: '2026-10-05',
+        categoryId: food);
+    int spent(int m) => budgets
+        .statuses(year: 2026, month: m, currencyCode: 'VND')
+        .firstWhere((s) => s.categoryId == food)
+        .spentMinor;
+    expect(spent(11), 0);
+    expect(spent(10), 300000);
+  });
 }

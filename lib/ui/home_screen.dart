@@ -5,11 +5,15 @@ library;
 import 'package:flutter/material.dart';
 
 import '../app/store.dart';
+import '../app/strings.dart';
 import '../app/theme.dart';
 import '../core/finance/money.dart';
+import 'add_transaction_screen.dart';
+import 'backup_screen.dart';
 import 'goal_detail_screen.dart';
 import 'icons.dart';
 import 'widgets.dart';
+import '../core/l10n.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key, required this.onSeeAllTransactions});
@@ -27,10 +31,17 @@ class HomeScreen extends StatelessWidget {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 96),
         children: [
-          Text(monthLabel(now.year, now.month), style: TichiText.caption),
-          const SizedBox(height: 2),
-          Text('Tổng quan', style: TichiText.pageTitle),
+          _Greeting(name: store.userName, now: now),
           const SizedBox(height: 16),
+          if (store.backupDue(now)) ...[
+            _BackupBanner(
+              lastBackupAt: store.lastBackupAt,
+              onBackup: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                  builder: (_) => const BackupScreen())),
+              onLater: () => store.snoozeBackupReminder(now),
+            ),
+            const SizedBox(height: 12),
+          ],
           if (summary.missingRate) ...[
             _RateBanner(onTap: () => showRateDialog(context)),
             const SizedBox(height: 12),
@@ -41,7 +52,7 @@ class HomeScreen extends StatelessWidget {
             children: [
               Expanded(
                 child: _SmallStat(
-                  label: 'Thu tháng này',
+                  label: tr('Thu tháng này', 'Income this month'),
                   value: formatMinor(summary.incomeMinor, base, showPlus: true),
                   color: TichiColors.primary,
                 ),
@@ -49,7 +60,7 @@ class HomeScreen extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: _SmallStat(
-                  label: 'Chi tháng này',
+                  label: tr('Chi tháng này', 'Spent this month'),
                   value: formatMinor(-summary.expenseMinor, base),
                   color: TichiColors.ink,
                 ),
@@ -64,10 +75,10 @@ class HomeScreen extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                  child: Text('Giao dịch gần đây', style: TichiText.section)),
+                  child: Text(tr('Giao dịch gần đây', 'Recent transactions'), style: TichiText.section)),
               TextButton(
                 onPressed: onSeeAllTransactions,
-                child: const Text('Xem tất cả'),
+                child: Text(tr('Xem tất cả', 'See all')),
               ),
             ],
           ),
@@ -76,14 +87,18 @@ class HomeScreen extends StatelessWidget {
               child: Padding(
                 padding: EdgeInsets.all(16),
                 child: Text(
-                  'Chưa có giao dịch. Bấm nút + để ghi khoản đầu tiên.',
+                  tr('Chưa có giao dịch. Bấm nút + để ghi khoản đầu tiên.', 'No transactions yet. Tap + to add your first one.'),
                   style: TichiText.caption,
                 ),
               ),
             )
           else
             GroupCard(children: [
-              for (final tx in summary.recent) TransactionTile(tx: tx),
+              for (final tx in summary.recent)
+                InkWell(
+                  onTap: () => openTransaction(context, tx),
+                  child: TransactionTile(tx: tx),
+                ),
             ]),
         ],
       ),
@@ -111,17 +126,19 @@ class _AssetCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Tổng tài sản',
+          Text(tr('Tổng tài sản', 'Total balance'),
               style: TextStyle(fontSize: 13, color: TichiColors.onPrimaryMuted)),
           const SizedBox(height: 4),
-          Text(
-            formatMinor(summary.totalMinor, base),
-            key: const Key('total-assets'),
+          AnimatedAmount(
+            minor: summary.totalMinor,
+            currency: base,
+            textKey: const Key('total-assets'),
             style: const TextStyle(
                 fontSize: 30,
                 fontWeight: FontWeight.w700,
                 letterSpacing: -0.5,
-                color: Colors.white),
+                color: Colors.white,
+                fontFeatures: [FontFeature.tabularFigures()]),
           ),
           const SizedBox(height: 14),
           const Divider(color: Color(0x2EFFFFFF)),
@@ -132,7 +149,7 @@ class _AssetCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Trong ví tiết kiệm', style: light),
+                    Text(tr('Trong ví tiết kiệm', 'In savings wallets'), style: light),
                     const SizedBox(height: 2),
                     Text(formatMinor(summary.savingsMinor, base), style: value),
                   ],
@@ -142,7 +159,7 @@ class _AssetCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Trong ví chi tiêu', style: light),
+                    Text(tr('Trong ví chi tiêu', 'In spending wallets'), style: light),
                     const SizedBox(height: 2),
                     Text(formatMinor(summary.spendingMinor, base),
                         style: value),
@@ -223,13 +240,114 @@ class _GoalCard extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 suggestion == null
-                    ? 'Đã quá hạn hoặc đã đủ tiền.'
-                    : 'Hôm nay nên tiết kiệm '
-                        '${formatMinor(suggestion.dailyMinor, goal.currencyCode)}',
+                    ? tr('Đã quá hạn hoặc đã đủ tiền.', 'Past due or fully funded.')
+                    : tr('Hôm nay nên tiết kiệm '
+                        '${formatMinor(suggestion.dailyMinor, goal.currencyCode)}', 'Save today: ' '${formatMinor(suggestion.dailyMinor, goal.currencyCode)}'),
                 style: TichiText.label,
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Nhắc sao lưu: dữ liệu chỉ nằm trên máy nên cần một bản dự phòng.
+/// Lời chào ở đầu Trang chủ: tên gọi của người dùng, câu chúc theo giờ và
+/// tháng đang xem. Tên dài thì cắt bớt, không làm vỡ bố cục.
+class _Greeting extends StatelessWidget {
+  const _Greeting({required this.name, required this.now});
+
+  final String? name;
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      key: const Key('home-greeting'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '${TichiStrings.timeGreeting(now)} · ${monthLabel(now.year, now.month)}',
+          style: TichiText.caption,
+        ),
+        const SizedBox(height: 2),
+        Text(
+          TichiStrings.hello(name),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TichiText.pageTitle,
+        ),
+      ],
+    );
+  }
+}
+
+class _BackupBanner extends StatelessWidget {
+  const _BackupBanner({
+    required this.lastBackupAt,
+    required this.onBackup,
+    required this.onLater,
+  });
+
+  final String? lastBackupAt;
+  final VoidCallback onBackup;
+  final VoidCallback onLater;
+
+  @override
+  Widget build(BuildContext context) {
+    final last = lastBackupAt;
+    return Card(
+      key: const Key('backup-banner'),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 8, 6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const IconAvatar(icon: 'insurance', color: 'green', size: 36),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                          last == null
+                              ? tr('Bạn chưa sao lưu lần nào', 'You haven\'t backed up yet')
+                              : tr('Đã lâu chưa sao lưu', 'It\'s been a while since your last backup'),
+                          style: TichiText.section),
+                      const SizedBox(height: 2),
+                      Text(
+                        last == null
+                            ? tr('Dữ liệu chỉ nằm trên máy này. Mất máy hay cài '
+                                'lại app mà chưa sao lưu là mất hết.', 'Your data only lives on this phone. Lose the phone or reinstall ' 'the app without a backup and it\'s gone.')
+                            : tr('Lần gần nhất ngày ${shortDate(last)}. Sao lưu '
+                                'lại để giữ cả những giao dịch mới.', 'Last backup on ${shortDate(last)}. Back up again ' 'to keep your newer transactions.'),
+                        style: TichiText.caption,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  key: const Key('backup-later'),
+                  onPressed: onLater,
+                  child: Text(tr('Để sau', 'Later')),
+                ),
+                TextButton(
+                  onPressed: onBackup,
+                  child: Text(tr('Sao lưu ngay', 'Back up now')),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -257,8 +375,8 @@ class _RateBanner extends StatelessWidget {
               SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  'Bạn có tiền USD nhưng chưa nhập tỷ giá, nên các tổng dưới '
-                  'đây chưa tính phần USD. Bấm để nhập tỷ giá.',
+                  tr('Bạn có tiền USD nhưng chưa nhập tỷ giá, nên các tổng dưới '
+                  'đây chưa tính phần USD. Bấm để nhập tỷ giá.', 'You have USD but no exchange rate yet, so the totals below ' 'don\'t include USD. Tap to enter a rate.'),
                   style: TextStyle(
                       fontSize: 13, color: TichiColors.warningText, height: 1.4),
                 ),

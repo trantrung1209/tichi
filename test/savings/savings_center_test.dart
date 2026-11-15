@@ -718,4 +718,23 @@ void main() {
       }
     });
   });
+
+  test('lần góp tiết kiệm không sửa được qua sửa giao dịch', () {
+    savings.contribute(
+        requestId: req(),
+        goalId: japan,
+        fromWalletId: bank,
+        amountMinor: 200000,
+        date: today);
+    final tx = core.transactions().first;
+    expect(tx.isSavingsMove, isTrue);
+    expect(
+        () => core.updateTransaction(tx.id,
+            walletId: bank,
+            toWalletId: vault,
+            amountMinor: 900000,
+            date: today),
+        throwsFinance('savings_not_editable'));
+    expect(savings.savedMinor(japan), 200000);
+  });
 }

@@ -11,9 +11,28 @@ import '../core/finance/finance_core.dart';
 import '../core/finance/money.dart';
 import 'icons.dart';
 import 'widgets.dart';
+import '../core/l10n.dart';
+
+/// Mở một giao dịch để sửa. Lần góp, rút tiết kiệm không sửa được: báo cách
+/// làm thay vì mở màn hình.
+void openTransaction(BuildContext context, TransactionView tx) {
+  if (tx.isSavingsMove) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+          content: Text(tr('Lần góp hoặc rút tiết kiệm không sửa được. Vuốt '
+              'sang trái để xóa rồi làm lại trong mục Tiết kiệm.', 'Savings deposits and withdrawals can\'t be edited. Swipe ' 'left to delete, then redo it in Savings.'))));
+    return;
+  }
+  Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => AddTransactionScreen(editing: tx)));
+}
 
 class AddTransactionScreen extends StatefulWidget {
-  const AddTransactionScreen({super.key});
+  /// [editing] có giá trị thì màn hình dùng để sửa giao dịch đó.
+  const AddTransactionScreen({super.key, this.editing});
+
+  final TransactionView? editing;
 
   @override
   State<AddTransactionScreen> createState() => _AddTransactionScreenState();
@@ -40,9 +59,49 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     super.initState();
     final store = StoreScope.read(context);
     _requestId = store.newRequestId();
+    final editing = widget.editing;
+    if (editing != null) {
+      _type = editing.type;
+      _walletId = editing.type == 'INCOME'
+          ? editing.destinationWalletId
+          : editing.sourceWalletId;
+      _toWalletId =
+          editing.type == 'TRANSFER' ? editing.destinationWalletId : null;
+      _categoryId = editing.categoryId;
+      _date = DateTime.tryParse(editing.date) ?? DateTime.now();
+      _amount.text = amountText(editing.amountMinor, editing.currency);
+      final received = editing.destinationAmountMinor;
+      if (editing.type == 'TRANSFER' &&
+          received != null &&
+          editing.destinationCurrency != editing.sourceCurrency) {
+        _received.text = amountText(received, editing.destinationCurrency!);
+      }
+      _note.text = editing.note ?? '';
+      return;
+    }
     final wallets = store.spendingWallets();
     if (wallets.isNotEmpty) _walletId = wallets.first.id;
     if (wallets.length > 1) _toWalletId = wallets[1].id;
+  }
+
+  bool get _isEdit => widget.editing != null;
+
+  Future<void> _delete() async {
+    final tx = widget.editing!;
+    final store = StoreScope.read(context);
+    final navigator = Navigator.of(context);
+    final ok = await confirmAction(context,
+        title: tr('Xóa giao dịch này?', 'Delete this transaction?'),
+        message: tr('Số dư các ví và báo cáo sẽ tính lại ngay.', 'Wallet balances and reports will update right away.'),
+        confirmLabel: tr('Xóa', 'Delete'));
+    if (!ok) return;
+    try {
+      store.deleteTransaction(tx.id);
+    } on FinanceException catch (error) {
+      return _fail(friendlyError(error));
+    }
+    HapticFeedback.mediumImpact();
+    navigator.pop();
   }
 
   @override
@@ -64,7 +123,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       {required bool target}) async {
     final picked = await pickWallet(context, wallets,
         selectedId: target ? _toWalletId : _walletId,
-        title: target ? 'Đến ví' : (_type == 'TRANSFER' ? 'Từ ví' : 'Ví'));
+        title: target ? tr('Đến ví', 'To wallet') : (_type == 'TRANSFER' ? tr('Từ ví', 'From wallet') : tr('Ví', 'Wallet')));
     if (picked == null) return;
     setState(() {
       if (target) {
@@ -95,13 +154,42 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   void _save(List<WalletInfo> wallets) {
     final store = StoreScope.read(context);
     final from = _find(wallets, _walletId);
-    if (from == null) return _fail('Chọn một ví.');
+    if (from == null) return _fail(tr('Chọn một ví.', 'Choose a wallet.'));
     final amount = parseMinor(_amount.text, from.currencyCode);
-    if (amount == null || amount <= 0) return _fail('Nhập số tiền lớn hơn 0.');
+    if (amount == null || amount <= 0) return _fail(tr('Nhập số tiền lớn hơn 0.', 'Enter an amount greater than 0.'));
     final note = _note.text.trim().isEmpty ? null : _note.text.trim();
     final date = dateKey(_date);
     setState(() => _saving = true);
     try {
+      final editing = widget.editing;
+      if (editing != null) {
+        int? received;
+        String? toId;
+        if (_type == 'TRANSFER') {
+          final to = _find(wallets, _toWalletId);
+          if (to == null || to.id == from.id) {
+            return _fail(tr('Chọn ví nhận khác ví chuyển.', 'Choose a different receiving wallet.'));
+          }
+          toId = to.id;
+          if (to.currencyCode != from.currencyCode) {
+            received = parseMinor(_received.text, to.currencyCode);
+            if (received == null || received <= 0) {
+              return _fail(tr('Nhập số tiền ví nhận được.', 'Enter the amount the wallet receives.'));
+            }
+          }
+        }
+        store.updateTransaction(editing.id,
+            walletId: from.id,
+            toWalletId: toId,
+            amountMinor: amount,
+            destinationAmountMinor: received,
+            date: date,
+            categoryId: _type == 'TRANSFER' ? null : _categoryId,
+            note: note);
+        HapticFeedback.lightImpact();
+        Navigator.of(context).pop();
+        return;
+      }
       switch (_type) {
         case 'INCOME':
           store.addIncome(
@@ -122,13 +210,13 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         default:
           final to = _find(wallets, _toWalletId);
           if (to == null || to.id == from.id) {
-            return _fail('Chọn ví nhận khác ví chuyển.');
+            return _fail(tr('Chọn ví nhận khác ví chuyển.', 'Choose a different receiving wallet.'));
           }
           int? received;
           if (to.currencyCode != from.currencyCode) {
             received = parseMinor(_received.text, to.currencyCode);
             if (received == null || received <= 0) {
-              return _fail('Nhập số tiền ví nhận được.');
+              return _fail(tr('Nhập số tiền ví nhận được.', 'Enter the amount the wallet receives.'));
             }
           }
           store.transfer(
@@ -165,12 +253,21 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
-          tooltip: 'Đóng',
+          tooltip: tr('Đóng', 'Close'),
           icon: const Icon(Icons.close),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text('Thêm giao dịch',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+        title: Text(_isEdit ? tr('Sửa giao dịch', 'Edit transaction') : tr('Thêm giao dịch', 'Add transaction'),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+        actions: [
+          if (_isEdit)
+            IconButton(
+              key: const Key('delete-transaction'),
+              tooltip: tr('Xóa giao dịch', 'Delete transaction'),
+              icon: Icon(Icons.delete_outline, color: TichiColors.danger),
+              onPressed: _delete,
+            ),
+        ],
       ),
       body: SafeArea(
         child: ListView(
@@ -178,37 +275,43 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           children: [
             SegmentedButton<String>(
               showSelectedIcon: false,
-              segments: const [
+              segments: [
                 ButtonSegment(
                     value: 'EXPENSE',
-                    label: Text('Chi', key: Key('type-EXPENSE'))),
+                    label: Text(tr('Chi', 'Expense'), key: Key('type-EXPENSE'))),
                 ButtonSegment(
                     value: 'INCOME',
-                    label: Text('Thu', key: Key('type-INCOME'))),
+                    label: Text(tr('Thu', 'Income'), key: Key('type-INCOME'))),
                 ButtonSegment(
                     value: 'TRANSFER',
-                    label: Text('Chuyển ví', key: Key('type-TRANSFER'))),
+                    label: Text(tr('Chuyển ví', 'Transfer'), key: Key('type-TRANSFER'))),
               ],
               selected: {_type},
-              onSelectionChanged: (selection) => setState(() {
-                _type = selection.first;
-                _categoryId = null;
-                _error = null;
-              }),
+              // Khi sửa thì không đổi loại giao dịch được.
+              onSelectionChanged: _isEdit
+                  ? null
+                  : (selection) {
+                      HapticFeedback.selectionClick();
+                      setState(() {
+                        _type = selection.first;
+                        _categoryId = null;
+                        _error = null;
+                      });
+                    },
             ),
             const SizedBox(height: 20),
             AmountInput(
               fieldKey: const Key('amount-field'),
               controller: _amount,
               currency: currency,
-              autofocus: true,
+              autofocus: !_isEdit,
               onChanged: (_) {
                 if (_error != null) setState(() => _error = null);
               },
             ),
             const SizedBox(height: 12),
             if (!isTransfer) ...[
-              const FieldLabel('Danh mục'),
+              FieldLabel(tr('Danh mục', 'Category')),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -224,8 +327,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                       selected: category.id == _categoryId,
                       selectedColor: tintFor(category.color).background,
                       showCheckmark: false,
-                      onSelected: (selected) => setState(
-                          () => _categoryId = selected ? category.id : null),
+                      onSelected: (selected) {
+                        HapticFeedback.selectionClick();
+                        setState(
+                            () => _categoryId = selected ? category.id : null);
+                      },
                     ),
                 ],
               ),
@@ -233,8 +339,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             ],
             GroupCard(children: [
               PickerRow(
-                label: isTransfer ? 'Từ ví' : 'Ví',
-                value: from?.name ?? 'Chọn ví',
+                label: isTransfer ? tr('Từ ví', 'From wallet') : tr('Ví', 'Wallet'),
+                value: from?.name ?? tr('Chọn ví', 'Choose wallet'),
                 leading: from == null
                     ? null
                     : IconAvatar(icon: from.icon, color: from.color, size: 28),
@@ -242,15 +348,15 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
               ),
               if (isTransfer)
                 PickerRow(
-                  label: 'Đến ví',
-                  value: to?.name ?? 'Chọn ví',
+                  label: tr('Đến ví', 'To wallet'),
+                  value: to?.name ?? tr('Chọn ví', 'Choose wallet'),
                   leading: to == null
                       ? null
                       : IconAvatar(icon: to.icon, color: to.color, size: 28),
                   onTap: () => _chooseWallet(wallets, target: true),
                 ),
               PickerRow(
-                label: 'Ngày',
+                label: tr('Ngày', 'Date'),
                 value: dayLabel(dateKey(_date), DateTime.now()),
                 onTap: _pickDate,
               ),
@@ -264,7 +370,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                     decimal: to.currencyCode == 'USD'),
                 inputFormatters: moneyFormatters(to.currencyCode),
                 decoration: InputDecoration(
-                  labelText: 'Số tiền ví ${to.name} nhận được',
+                  labelText: tr('Số tiền ví ${to.name} nhận được', 'Amount ${to.name} receives'),
                   suffixText: to.currencyCode == 'USD' ? 'USD' : '₫',
                 ),
               ),
@@ -273,14 +379,14 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             TextField(
               controller: _note,
               decoration:
-                  const InputDecoration(labelText: 'Ghi chú (không bắt buộc)'),
+                  InputDecoration(labelText: tr('Ghi chú (không bắt buộc)', 'Note (optional)')),
             ),
             if (_error != null) FormError(_error!),
             const SizedBox(height: 20),
             FilledButton(
               key: const Key('save-button'),
               onPressed: _saving ? null : () => _save(wallets),
-              child: const Text('Lưu'),
+              child: Text(tr('Lưu', 'Save')),
             ),
           ],
         ),

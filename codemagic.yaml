@@ -1,0 +1,36 @@
+# Build Tichi cho iPhone trên máy Mac của Codemagic rồi tải lên TestFlight.
+# Bấm "Start new build" trên codemagic.io, chọn workflow "iOS → TestFlight".
+workflows:
+  ios-testflight:
+    name: iOS → TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      # Tên integration App Store Connect đã tạo trên Codemagic.
+      app_store_connect: Tichi ASC
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.trungnguyen.tichi
+    scripts:
+      - name: Lấy thư viện
+        script: flutter pub get
+      - name: Chạy kiểm thử
+        script: flutter test
+      - name: Dùng hồ sơ ký app
+        script: xcode-project use-profiles
+      - name: Build file ipa
+        script: |
+          flutter build ipa --release \
+            --build-number=$BUILD_NUMBER \
+            --export-options-plist=/Users/builder/export_options.plist
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true

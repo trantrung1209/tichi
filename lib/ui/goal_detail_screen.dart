@@ -13,6 +13,7 @@ import 'goal_form_screen.dart';
 import 'icons.dart';
 import 'savings_move_screen.dart';
 import 'widgets.dart';
+import '../core/l10n.dart';
 
 class GoalDetailScreen extends StatelessWidget {
   const GoalDetailScreen({super.key, required this.goalId});
@@ -25,13 +26,13 @@ class GoalDetailScreen extends StatelessWidget {
     final messenger = ScaffoldMessenger.of(context);
     final ok = await confirmAction(
       context,
-      title: 'Xóa mục tiêu?',
+      title: tr('Xóa mục tiêu?', 'Delete goal?'),
       message: goal.savedMinor > 0
-          ? '${formatMinor(goal.savedMinor, goal.currencyCode)} vẫn nằm trong '
+          ? tr('${formatMinor(goal.savedMinor, goal.currencyCode)} vẫn nằm trong '
               'ví tiết kiệm và trở thành "Chưa gắn mục tiêu". Lịch sử giao '
-              'dịch được giữ lại.'
-          : 'Lịch sử giao dịch được giữ lại.',
-      confirmLabel: 'Xóa',
+              'dịch được giữ lại.', '${formatMinor(goal.savedMinor, goal.currencyCode)} stays in the ' 'savings wallet and becomes "Unassigned". Transaction history ' 'is kept.')
+          : tr('Lịch sử giao dịch được giữ lại.', 'Transaction history is kept.'),
+      confirmLabel: tr('Xóa', 'Delete'),
     );
     if (!ok) return;
     try {
@@ -67,12 +68,12 @@ class GoalDetailScreen extends StatelessWidget {
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
         actions: [
           IconButton(
-            tooltip: 'Sửa mục tiêu',
+            tooltip: tr('Sửa mục tiêu', 'Edit goal'),
             icon: const Icon(Icons.edit_outlined),
             onPressed: () => open(GoalFormScreen(goalId: goalId)),
           ),
           IconButton(
-            tooltip: 'Xóa mục tiêu',
+            tooltip: tr('Xóa mục tiêu', 'Delete goal'),
             icon: const Icon(Icons.delete_outline),
             onPressed: () => _delete(context, goal),
           ),
@@ -116,7 +117,7 @@ class GoalDetailScreen extends StatelessWidget {
                                           style: TichiText.amount),
                                     ),
                                     Text(
-                                        'trên ${formatMinor(goal.targetMinor, c)}',
+                                        tr('trên ${formatMinor(goal.targetMinor, c)}', 'of ${formatMinor(goal.targetMinor, c)}'),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: TichiText.label),
@@ -133,11 +134,11 @@ class GoalDetailScreen extends StatelessWidget {
                               Expanded(
                                 child: Text(
                                     goal.remainingMinor > 0
-                                        ? 'Còn thiếu ${formatMinor(goal.remainingMinor, c)}'
-                                        : 'Đã đủ tiền',
+                                        ? tr('Còn thiếu ${formatMinor(goal.remainingMinor, c)}', '${formatMinor(goal.remainingMinor, c)} to go')
+                                        : tr('Đã đủ tiền', 'Goal reached'),
                                     style: TichiText.caption),
                               ),
-                              Text('Hạn ${shortDate(goal.targetDate)}',
+                              Text(tr('Hạn ${shortDate(goal.targetDate)}', 'Due ${shortDate(goal.targetDate)}'),
                                   style: TichiText.caption),
                             ],
                           ),
@@ -145,7 +146,7 @@ class GoalDetailScreen extends StatelessWidget {
                           Row(
                             children: [
                               Expanded(
-                                  child: Text('Tiền nằm trong',
+                                  child: Text(tr('Tiền nằm trong', 'Money kept in'),
                                       style: TichiText.caption)),
                               Text(vault.name,
                                   style: const TextStyle(
@@ -159,36 +160,36 @@ class GoalDetailScreen extends StatelessWidget {
                   const SizedBox(height: 16),
                   if (suggestion != null) ...[
                     FieldLabel(
-                        'Để kịp hạn (còn ${suggestion.daysLeft} ngày), nên tiết kiệm khoảng'),
+                        tr('Để kịp hạn (còn ${suggestion.daysLeft} ngày), nên tiết kiệm khoảng', 'To make it on time (${suggestion.daysLeft} days left), save about')),
                     Row(
                       children: [
                         Expanded(
                             child: _SuggestionTile(
-                                label: 'Mỗi ngày',
+                                label: tr('Mỗi ngày', 'Daily'),
                                 value: formatMinor(suggestion.dailyMinor, c),
                                 highlight: true)),
                         const SizedBox(width: 8),
                         Expanded(
                             child: _SuggestionTile(
-                                label: 'Mỗi tuần',
+                                label: tr('Mỗi tuần', 'Weekly'),
                                 value: formatMinor(suggestion.weeklyMinor, c))),
                         const SizedBox(width: 8),
                         Expanded(
                             child: _SuggestionTile(
-                                label: 'Mỗi tháng',
+                                label: tr('Mỗi tháng', 'Monthly'),
                                 value: formatMinor(suggestion.monthlyMinor, c))),
                       ],
                     ),
                   ] else
                     Text(
                         goal.remainingMinor <= 0
-                            ? 'Mục tiêu đã đủ tiền.'
-                            : 'Đã quá hạn. Sửa ngày hoàn thành để có số gợi ý mới.',
+                            ? tr('Mục tiêu đã đủ tiền.', 'This goal is fully funded.')
+                            : tr('Đã quá hạn. Sửa ngày hoàn thành để có số gợi ý mới.', 'Past the due date. Change the target date to get a new suggestion.'),
                         style: TichiText.caption),
                   const SizedBox(height: 20),
-                  const FieldLabel('Lịch sử'),
+                  FieldLabel(tr('Lịch sử', 'History')),
                   if (history.isEmpty)
-                    Text('Chưa có lần tiết kiệm nào.',
+                    Text(tr('Chưa có lần tiết kiệm nào.', 'No savings yet.'),
                         style: TichiText.caption)
                   else
                     GroupCard(children: [
@@ -244,7 +245,7 @@ class GoalDetailScreen extends StatelessWidget {
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16)),
                       ),
-                      child: const Text('Rút tiền'),
+                      child: Text(tr('Rút tiền', 'Withdraw')),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -254,7 +255,7 @@ class GoalDetailScreen extends StatelessWidget {
                           ? null
                           : () => open(SavingsMoveScreen(
                               mode: SavingsMode.contribute, goalId: goalId)),
-                      child: const Text('Tiết kiệm ngay'),
+                      child: Text(tr('Tiết kiệm ngay', 'Save now')),
                     ),
                   ),
                 ],
@@ -268,9 +269,9 @@ class GoalDetailScreen extends StatelessWidget {
 }
 
 String _eventLabel(GoalEvent event, String vaultName) => switch (event.kind) {
-      'ALLOCATION' => 'Chia từ tiền có sẵn trong $vaultName',
-      'WITHDRAWAL' => 'Rút về ${event.walletName ?? 'ví'}',
-      _ => 'Từ ${event.walletName ?? 'ví'} → $vaultName',
+      'ALLOCATION' => tr('Chia từ tiền có sẵn trong $vaultName', 'Assigned from money already in $vaultName'),
+      'WITHDRAWAL' => tr('Rút về ${event.walletName ?? 'ví'}', 'Withdrawn to ${event.walletName ?? 'wallet'}'),
+      _ => tr('Từ ${event.walletName ?? 'ví'} → $vaultName', 'From ${event.walletName ?? 'wallet'} › $vaultName'),
     };
 
 class _SuggestionTile extends StatelessWidget {

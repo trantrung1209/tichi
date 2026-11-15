@@ -14,6 +14,7 @@ import 'icons.dart';
 import 'savings_move_screen.dart';
 import 'wallet_form_screen.dart';
 import 'widgets.dart';
+import '../core/l10n.dart';
 
 class SavingsScreen extends StatelessWidget {
   const SavingsScreen({super.key});
@@ -56,7 +57,7 @@ class SavingsScreen extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                  child: Text('Tiết kiệm', style: TichiText.pageTitle)),
+                  child: Text(tr('Tiết kiệm', 'Savings'), style: TichiText.pageTitle)),
               if (goals.isNotEmpty)
                 OutlinedButton(
                   onPressed: () => open(
@@ -65,11 +66,11 @@ class SavingsScreen extends StatelessWidget {
                       minimumSize: const Size(0, 44),
                       foregroundColor: TichiColors.primary,
                       side: BorderSide(color: TichiColors.primary)),
-                  child: const Text('Rút tiền'),
+                  child: Text(tr('Rút tiền', 'Withdraw')),
                 ),
               const SizedBox(width: 8),
               IconButton.filled(
-                tooltip: 'Tạo mục tiêu mới',
+                tooltip: tr('Tạo mục tiêu mới', 'Create a new goal'),
                 onPressed: vaults.isEmpty
                     ? null
                     : () => open(const GoalFormScreen()),
@@ -82,9 +83,9 @@ class SavingsScreen extends StatelessWidget {
             EmptyState(
               icon: 'coins',
               message:
-                  'Bạn chưa có ví tiết kiệm. Tạo một ví tiết kiệm để bắt đầu '
-                  'đặt mục tiêu.',
-              actionLabel: 'Tạo ví tiết kiệm',
+                  tr('Bạn chưa có ví tiết kiệm. Tạo một ví tiết kiệm để bắt đầu '
+                  'đặt mục tiêu.', 'You don\'t have a savings wallet yet. Create one to start ' 'setting goals.'),
+              actionLabel: tr('Tạo ví tiết kiệm', 'Create savings wallet'),
               onAction: () =>
                   open(const WalletFormScreen(initialType: 'SAVINGS')),
             )
@@ -95,6 +96,7 @@ class SavingsScreen extends StatelessWidget {
               goalCount: active.length,
               totalTarget: totalTarget,
               streak: streak,
+              frequency: store.reminderFrequency,
               missingRate: missingRate,
             ),
             if (focus != null && suggestion != null) ...[
@@ -108,7 +110,7 @@ class SavingsScreen extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Gợi ý hôm nay',
+                            Text(tr('Gợi ý hôm nay', 'Today\'s suggestion'),
                                 style: TichiText.label),
                             const SizedBox(height: 2),
                             Text(
@@ -126,7 +128,7 @@ class SavingsScreen extends StatelessWidget {
                         onPressed: () => open(SavingsMoveScreen(
                             mode: SavingsMode.contribute,
                             goalId: focus.goalId)),
-                        child: const Text('Tiết kiệm'),
+                        child: Text(tr('Tiết kiệm', 'Savings')),
                       ),
                     ],
                   ),
@@ -140,11 +142,11 @@ class SavingsScreen extends StatelessWidget {
                   child: ListTile(
                     leading: IconAvatar(icon: vault.icon, color: vault.color),
                     title: Text(
-                        'Chưa gắn mục tiêu: '
-                        '${formatMinor(store.unallocated(vault.id), vault.currencyCode)}',
+                        tr('Chưa gắn mục tiêu: '
+                        '${formatMinor(store.unallocated(vault.id), vault.currencyCode)}', 'Unassigned: ' '${formatMinor(store.unallocated(vault.id), vault.currencyCode)}'),
                         style: const TextStyle(
                             fontSize: 14, fontWeight: FontWeight.w600)),
-                    subtitle: Text('Trong ${vault.name}'),
+                    subtitle: Text(tr('Trong ${vault.name}', 'In ${vault.name}')),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: goals.isEmpty
                         ? null
@@ -155,14 +157,14 @@ class SavingsScreen extends StatelessWidget {
                 ),
               ],
             const SizedBox(height: 20),
-            Text('Mục tiêu của bạn', style: TichiText.section),
+            Text(tr('Mục tiêu của bạn', 'Your goals'), style: TichiText.section),
             const SizedBox(height: 8),
             if (goals.isEmpty)
               EmptyState(
                 icon: 'savings',
-                message: 'Chưa có mục tiêu nào. Đặt mục tiêu đầu tiên, Tichi '
-                    'sẽ tính mỗi ngày cần để dành bao nhiêu.',
-                actionLabel: 'Tạo mục tiêu',
+                message: tr('Chưa có mục tiêu nào. Đặt mục tiêu đầu tiên, Tichi '
+                    'sẽ tính mỗi ngày cần để dành bao nhiêu.', 'No goals yet. Set your first goal and Tichi ' 'will work out how much to save each day.'),
+                actionLabel: tr('Tạo mục tiêu', 'Create goal'),
                 onAction: () => open(const GoalFormScreen()),
               ),
             for (final goal in goals) ...[
@@ -186,6 +188,7 @@ class _SummaryCard extends StatelessWidget {
     required this.goalCount,
     required this.totalTarget,
     required this.streak,
+    required this.frequency,
     required this.missingRate,
   });
 
@@ -194,6 +197,9 @@ class _SummaryCard extends StatelessWidget {
   final int goalCount;
   final int totalTarget;
   final int streak;
+
+  /// Chuỗi đếm theo ngày, tuần hay tháng, theo tần suất nhắc tiết kiệm.
+  final String frequency;
   final bool missingRate;
 
   @override
@@ -212,7 +218,7 @@ class _SummaryCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Tổng trong ví tiết kiệm',
+                Text(tr('Tổng trong ví tiết kiệm', 'Total in savings wallets'),
                     style: TextStyle(
                         fontSize: 13, color: TichiColors.onPrimaryMuted)),
                 const SizedBox(height: 4),
@@ -228,12 +234,12 @@ class _SummaryCard extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   goalCount == 0
-                      ? 'Chưa có mục tiêu'
-                      : '$goalCount mục tiêu · tổng cần ${formatMinor(totalTarget, base)}',
+                      ? tr('Chưa có mục tiêu', 'No goals yet')
+                      : tr('$goalCount mục tiêu · tổng cần ${formatMinor(totalTarget, base)}', '$goalCount goals · ${formatMinor(totalTarget, base)} needed in total'),
                   style: light,
                 ),
                 if (missingRate)
-                  Text('Chưa tính ví USD vì chưa có tỷ giá',
+                  Text(tr('Chưa tính ví USD vì chưa có tỷ giá', 'USD wallets not included: no exchange rate yet'),
                       style: light),
               ],
             ),
@@ -242,12 +248,17 @@ class _SummaryCard extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text('$streak ngày',
+              Text(
+                  switch (frequency) {
+                    'weekly' => tr('$streak tuần', '$streak weeks'),
+                    'monthly' => tr('$streak tháng', '$streak months'),
+                    _ => tr('$streak ngày', '$streak days'),
+                  },
                   style: const TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.w700,
                       color: Colors.white)),
-              Text('liên tiếp', style: light),
+              Text(tr('liên tiếp', 'in a row'), style: light),
             ],
           ),
         ],
@@ -285,7 +296,7 @@ class _GoalCard extends StatelessWidget {
                         style: const TextStyle(
                             fontSize: 15, fontWeight: FontWeight.w600)),
                   ),
-                  Text(done ? 'Hoàn thành' : '${goal.percent}%',
+                  Text(done ? tr('Hoàn thành', 'Completed') : '${goal.percent}%',
                       style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
@@ -304,7 +315,7 @@ class _GoalCard extends StatelessWidget {
                       style: TichiText.label,
                     ),
                   ),
-                  Text('Hạn ${shortDate(goal.targetDate)}',
+                  Text(tr('Hạn ${shortDate(goal.targetDate)}', 'Due ${shortDate(goal.targetDate)}'),
                       style: TichiText.label),
                 ],
               ),

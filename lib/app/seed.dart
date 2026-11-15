@@ -3,40 +3,51 @@ library;
 
 import '../core/finance/finance_core.dart';
 
-/// (tên, biểu tượng, màu)
+/// (tên tiếng Việt, tên tiếng Anh, biểu tượng, màu)
 const _expenseCategories = [
-  ('Ăn uống', 'food', 'orange'),
-  ('Di chuyển', 'transport', 'blue'),
-  ('Mua sắm', 'shopping', 'pink'),
-  ('Nhà ở', 'home', 'teal'),
-  ('Hóa đơn', 'bills', 'purple'),
-  ('Sức khỏe', 'health', 'red'),
-  ('Giải trí', 'entertainment', 'gold'),
-  ('Khác', 'more', 'stone'),
+  ('Ăn uống', 'Food & drinks', 'food', 'orange'),
+  ('Di chuyển', 'Transport', 'transport', 'blue'),
+  ('Mua sắm', 'Shopping', 'shopping', 'pink'),
+  ('Nhà ở', 'Housing', 'home', 'teal'),
+  ('Hóa đơn', 'Bills', 'bills', 'purple'),
+  ('Sức khỏe', 'Health', 'health', 'red'),
+  ('Giải trí', 'Entertainment', 'entertainment', 'gold'),
+  ('Khác', 'Other', 'more', 'stone'),
 ];
 
 const _incomeCategories = [
-  ('Lương', 'salary', 'green'),
-  ('Thưởng', 'bonus', 'gold'),
-  ('Kinh doanh', 'business', 'blue'),
-  ('Khác', 'more', 'stone'),
+  ('Lương', 'Salary', 'salary', 'green'),
+  ('Thưởng', 'Bonus', 'bonus', 'gold'),
+  ('Kinh doanh', 'Business', 'business', 'blue'),
+  ('Khác', 'Other', 'more', 'stone'),
 ];
 
 /// Tạo ví và danh mục mặc định nếu cơ sở dữ liệu chưa có ví nào. Số dư đầu
 /// là 0; người dùng sửa số dư đầu khi tạo ví mới, hoặc ghi khoản thu.
-void seedIfEmpty(FinanceCore core) {
+///
+/// [english]: tên ví và danh mục bằng tiếng Anh. [currency]: loại tiền của
+/// các ví mặc định và loại tiền hiển thị (VND hoặc USD).
+void seedIfEmpty(FinanceCore core,
+    {bool english = false, String currency = 'VND'}) {
   if (core.wallets(includeArchived: true).isNotEmpty) return;
+  String name(String vi, String en) => english ? en : vi;
   core.runInTransaction(() {
-    core.createWallet(name: 'Tiền mặt', type: 'CASH', currencyCode: 'VND');
-    core.createWallet(name: 'Ngân hàng', type: 'BANK', currencyCode: 'VND');
     core.createWallet(
-        name: 'Ví tiết kiệm', type: 'SAVINGS', currencyCode: 'VND');
-    for (final (name, icon, color) in _expenseCategories) {
-      core.createCategory(name: name, type: 'EXPENSE', icon: icon, color: color);
+        name: name('Tiền mặt', 'Cash'), type: 'CASH', currencyCode: currency);
+    core.createWallet(
+        name: name('Ngân hàng', 'Bank'), type: 'BANK', currencyCode: currency);
+    core.createWallet(
+        name: name('Ví tiết kiệm', 'Savings'),
+        type: 'SAVINGS',
+        currencyCode: currency);
+    for (final (vi, en, icon, color) in _expenseCategories) {
+      core.createCategory(
+          name: name(vi, en), type: 'EXPENSE', icon: icon, color: color);
     }
-    for (final (name, icon, color) in _incomeCategories) {
-      core.createCategory(name: name, type: 'INCOME', icon: icon, color: color);
+    for (final (vi, en, icon, color) in _incomeCategories) {
+      core.createCategory(
+          name: name(vi, en), type: 'INCOME', icon: icon, color: color);
     }
-    core.setSetting('base_currency', 'VND');
+    core.setSetting('base_currency', currency);
   });
 }

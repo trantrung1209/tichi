@@ -63,3 +63,8 @@ Claude outputs/
 *.aab
 *.pdf
 Bảng thương hiệu*.png
+
+# Ảnh, file nén cá nhân (tên tiếng Việt trên Mac có thể ở dạng tách dấu)
+*Savora.png
+*.zip
+Photos-*/

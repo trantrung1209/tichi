@@ -9,6 +9,7 @@ import '../core/finance/finance_core.dart';
 import '../core/finance/money.dart';
 import 'icons.dart';
 import 'widgets.dart';
+import '../core/l10n.dart';
 
 class GoalFormScreen extends StatefulWidget {
   /// [goalId] null là tạo mục tiêu mới.
@@ -74,17 +75,17 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
     final store = StoreScope.read(context);
     final walletId = _walletId;
     if (walletId == null) {
-      setState(() => _error = 'Chọn một ví tiết kiệm.');
+      setState(() => _error = tr('Chọn một ví tiết kiệm.', 'Choose a savings wallet.'));
       return;
     }
     final currency = store.wallet(walletId).currencyCode;
     final target = parseMinor(_target.text, currency);
     if (_name.text.trim().isEmpty) {
-      setState(() => _error = 'Đặt tên cho mục tiêu.');
+      setState(() => _error = tr('Đặt tên cho mục tiêu.', 'Give your goal a name.'));
       return;
     }
     if (target == null || target <= 0) {
-      setState(() => _error = 'Nhập số tiền mục tiêu lớn hơn 0.');
+      setState(() => _error = tr('Nhập số tiền mục tiêu lớn hơn 0.', 'Enter a target amount greater than 0.'));
       return;
     }
     try {
@@ -142,11 +143,11 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
-          tooltip: 'Đóng',
+          tooltip: tr('Đóng', 'Close'),
           icon: const Icon(Icons.close),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: Text(_isEdit ? 'Sửa mục tiêu' : 'Mục tiêu mới',
+        title: Text(_isEdit ? tr('Sửa mục tiêu', 'Edit goal') : tr('Mục tiêu mới', 'New goal'),
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
       ),
       body: SafeArea(
@@ -157,8 +158,8 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
               key: const Key('goal-name'),
               controller: _name,
               textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(
-                  labelText: 'Tên mục tiêu', hintText: 'Ví dụ: Du lịch Nhật Bản'),
+              decoration: InputDecoration(
+                  labelText: tr('Tên mục tiêu', 'Goal name'), hintText: tr('Ví dụ: Du lịch Nhật Bản', 'e.g. Trip to Japan')),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -168,7 +169,7 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
                   TextInputType.numberWithOptions(decimal: currency == 'USD'),
               inputFormatters: moneyFormatters(currency),
               decoration: InputDecoration(
-                labelText: 'Số tiền mục tiêu',
+                labelText: tr('Số tiền mục tiêu', 'Target amount'),
                 suffixText: currency == 'USD' ? 'USD' : '₫',
               ),
               onChanged: (_) => setState(() => _error = null),
@@ -176,13 +177,13 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
             const SizedBox(height: 16),
             GroupCard(children: [
               PickerRow(
-                label: 'Ngày hoàn thành',
+                label: tr('Ngày hoàn thành', 'Target date'),
                 value: shortDate(dateKey(_targetDate)),
                 onTap: _pickDate,
               ),
               PickerRow(
-                label: 'Ví tiết kiệm',
-                value: vault?.name ?? 'Chọn ví',
+                label: tr('Ví tiết kiệm', 'Savings wallet'),
+                value: vault?.name ?? tr('Chọn ví', 'Choose wallet'),
                 leading: vault == null
                     ? null
                     : IconAvatar(icon: vault.icon, color: vault.color, size: 28),
@@ -191,25 +192,25 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
                     ? null
                     : () async {
                         final picked = await pickWallet(context, vaults,
-                            selectedId: _walletId, title: 'Ví tiết kiệm');
+                            selectedId: _walletId, title: tr('Ví tiết kiệm', 'Savings wallet'));
                         if (picked != null) setState(() => _walletId = picked);
                       },
               ),
             ]),
             const SizedBox(height: 16),
-            const FieldLabel('Mức ưu tiên'),
+            FieldLabel(tr('Mức ưu tiên', 'Priority')),
             SegmentedButton<int>(
               showSelectedIcon: false,
-              segments: const [
-                ButtonSegment(value: 0, label: Text('Thấp')),
-                ButtonSegment(value: 1, label: Text('Vừa')),
-                ButtonSegment(value: 2, label: Text('Cao')),
+              segments: [
+                ButtonSegment(value: 0, label: Text(tr('Thấp', 'Low'))),
+                ButtonSegment(value: 1, label: Text(tr('Vừa', 'Medium'))),
+                ButtonSegment(value: 2, label: Text(tr('Cao', 'High'))),
               ],
               selected: {_priority},
               onSelectionChanged: (s) => setState(() => _priority = s.first),
             ),
             const SizedBox(height: 16),
-            const FieldLabel('Biểu tượng'),
+            FieldLabel(tr('Biểu tượng', 'Icon')),
             IconColorPicker(
               icons: goalIconChoices,
               iconKey: _icon,
@@ -226,11 +227,11 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Để kịp hạn trong $days ngày, nên tiết kiệm khoảng',
+                    Text(tr('Để kịp hạn trong $days ngày, nên tiết kiệm khoảng', 'To make it in $days days, save about'),
                         style: TextStyle(
                             fontSize: 12, color: TichiColors.softText)),
                     const SizedBox(height: 4),
-                    Text('${formatMinor(daily, currency)} mỗi ngày',
+                    Text(tr('${formatMinor(daily, currency)} mỗi ngày', '${formatMinor(daily, currency)} a day'),
                         style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.w700,
@@ -244,7 +245,7 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
             FilledButton(
               key: const Key('goal-save'),
               onPressed: _save,
-              child: Text(_isEdit ? 'Lưu' : 'Tạo mục tiêu'),
+              child: Text(_isEdit ? tr('Lưu', 'Save') : tr('Tạo mục tiêu', 'Create goal')),
             ),
           ],
         ),

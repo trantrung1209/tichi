@@ -10,6 +10,7 @@ import '../core/finance/finance_core.dart';
 import '../core/finance/money.dart';
 import 'icons.dart';
 import 'widgets.dart';
+import '../core/l10n.dart';
 
 class BudgetsScreen extends StatelessWidget {
   const BudgetsScreen({super.key});
@@ -38,12 +39,12 @@ class BudgetsScreen extends StatelessWidget {
                     Text(monthLabel(now.year, now.month),
                         style: TichiText.caption),
                     const SizedBox(height: 2),
-                    Text('Ngân sách', style: TichiText.pageTitle),
+                    Text(tr('Ngân sách', 'Budgets'), style: TichiText.pageTitle),
                   ],
                 ),
               ),
               IconButton.filled(
-                tooltip: 'Thêm ngân sách',
+                tooltip: tr('Thêm ngân sách', 'Add budget'),
                 onPressed: () => showBudgetSheet(context),
                 icon: const Icon(Icons.add),
               ),
@@ -53,9 +54,9 @@ class BudgetsScreen extends StatelessWidget {
           if (statuses.isEmpty)
             EmptyState(
               icon: 'budget',
-              message: 'Đặt một mức chi cho cả tháng hoặc cho từng danh mục. '
-                  'Tichi sẽ cho bạn biết khi đã dùng 80% và khi vượt mức.',
-              actionLabel: 'Đặt ngân sách',
+              message: tr('Đặt một mức chi cho cả tháng hoặc cho từng danh mục. '
+                  'Tichi sẽ cho bạn biết khi đã dùng 80% và khi vượt mức.', 'Set a spending limit for the whole month or for each category. ' 'Tichi tells you when you reach 80% and when you go over.'),
+              actionLabel: tr('Đặt ngân sách', 'Set a budget'),
               onAction: () => showBudgetSheet(context),
             ),
           if (overall != null)
@@ -67,7 +68,7 @@ class BudgetsScreen extends StatelessWidget {
             ),
           if (byCategory.isNotEmpty) ...[
             const SizedBox(height: 20),
-            Text('Theo danh mục', style: TichiText.section),
+            Text(tr('Theo danh mục', 'By category'), style: TichiText.section),
             const SizedBox(height: 8),
             GroupCard(children: [
               for (final status in byCategory)
@@ -119,8 +120,8 @@ class BudgetsScreen extends StatelessWidget {
           ],
           const SizedBox(height: 16),
           Text(
-              'Ngân sách tính các khoản chi trong tháng từ ví cùng loại tiền '
-              'hiển thị. Chuyển ví và tiết kiệm không bị tính.',
+              tr('Ngân sách tính các khoản chi trong tháng từ ví cùng loại tiền '
+              'hiển thị. Chuyển ví và tiết kiệm không bị tính.', 'Budgets count this month\'s expenses from wallets in the displayed ' 'currency. Transfers and savings are not counted.'),
               style: TichiText.label),
         ],
       ),
@@ -136,8 +137,8 @@ BudgetStatus? _overall(List<BudgetStatus> statuses) {
 }
 
 String _levelText(BudgetStatus status) => switch (status.level) {
-      'over' => 'Vượt ${status.percent - 100}%',
-      'warning' => 'Sắp chạm · ${status.percent}%',
+      'over' => tr('Vượt ${status.percent - 100}%', 'Over by ${status.percent - 100}%'),
+      'warning' => tr('Sắp chạm · ${status.percent}%', 'Almost there · ${status.percent}%'),
       _ => '${status.percent}%',
     };
 
@@ -173,7 +174,7 @@ class _OverallCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(remaining >= 0 ? 'Còn lại trong tháng' : 'Đã vượt ngân sách',
+              Text(remaining >= 0 ? tr('Còn lại trong tháng', 'Left this month') : tr('Đã vượt ngân sách', 'Over budget'),
                   style: TichiText.caption),
               const SizedBox(height: 4),
               Text(formatMinor(remaining.abs(), base),
@@ -194,8 +195,8 @@ class _OverallCard extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                        'Đã chi ${formatMinor(status.spentMinor, base)} / '
-                        '${formatMinor(status.limitMinor, base)}',
+                        tr('Đã chi ${formatMinor(status.spentMinor, base)} / '
+                        '${formatMinor(status.limitMinor, base)}', 'Spent ${formatMinor(status.spentMinor, base)} / ' '${formatMinor(status.limitMinor, base)}'),
                         style: TichiText.caption),
                   ),
                   Text(_levelText(status),
@@ -208,8 +209,8 @@ class _OverallCard extends StatelessWidget {
               if (remaining > 0) ...[
                 const Divider(height: 24),
                 Text(
-                    'Còn $daysLeft ngày. Nên chi dưới '
-                    '${formatMinor(perDay, base)} mỗi ngày để không vượt.',
+                    tr('Còn $daysLeft ngày. Nên chi dưới '
+                    '${formatMinor(perDay, base)} mỗi ngày để không vượt.', '$daysLeft days left. Spend under ' '${formatMinor(perDay, base)} a day to stay on track.'),
                     style: const TextStyle(fontSize: 13, height: 1.4)),
               ],
             ],
@@ -267,7 +268,7 @@ class _BudgetSheetState extends State<_BudgetSheet> {
     final store = StoreScope.read(context);
     final amount = parseMinor(_amount.text, store.baseCurrency);
     if (amount == null || amount <= 0) {
-      setState(() => _error = 'Nhập số tiền lớn hơn 0.');
+      setState(() => _error = tr('Nhập số tiền lớn hơn 0.', 'Enter an amount greater than 0.'));
       return;
     }
     try {
@@ -300,17 +301,17 @@ class _BudgetSheetState extends State<_BudgetSheet> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(isEdit ? 'Sửa ngân sách' : 'Đặt ngân sách tháng',
+              Text(isEdit ? tr('Sửa ngân sách', 'Edit budget') : tr('Đặt ngân sách tháng', 'Set monthly budget'),
                   style: TichiText.section),
               const SizedBox(height: 12),
-              const FieldLabel('Áp dụng cho'),
+              FieldLabel(tr('Áp dụng cho', 'Applies to')),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: [
                   ChoiceChip(
                     avatar: const Icon(Icons.pie_chart, size: 18),
-                    label: const Text('Cả tháng'),
+                    label: Text(tr('Cả tháng', 'Whole month')),
                     selected: _categoryId == null,
                     showCheckmark: false,
                     onSelected:
@@ -338,7 +339,7 @@ class _BudgetSheetState extends State<_BudgetSheet> {
               ),
               if (_error != null) FormError(_error!),
               const SizedBox(height: 16),
-              FilledButton(onPressed: _save, child: const Text('Lưu')),
+              FilledButton(onPressed: _save, child: Text(tr('Lưu', 'Save'))),
               if (isEdit) ...[
                 const SizedBox(height: 8),
                 TextButton(
@@ -346,7 +347,7 @@ class _BudgetSheetState extends State<_BudgetSheet> {
                   style: TextButton.styleFrom(
                       foregroundColor: TichiColors.danger,
                       minimumSize: const Size.fromHeight(48)),
-                  child: const Text('Xóa ngân sách này'),
+                  child: Text(tr('Xóa ngân sách này', 'Delete this budget')),
                 ),
               ],
             ],

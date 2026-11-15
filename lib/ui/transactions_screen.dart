@@ -1,5 +1,5 @@
-/// Danh sách giao dịch theo tháng, nhóm theo ngày. Vuốt sang trái để xóa,
-/// có nút Hoàn tác.
+/// Danh sách giao dịch theo tháng, nhóm theo ngày. Chạm để sửa, vuốt sang
+/// trái để xóa, có nút Hoàn tác.
 library;
 
 import 'package:flutter/material.dart';
@@ -8,7 +8,10 @@ import '../app/store.dart';
 import '../app/theme.dart';
 import '../core/finance/finance_core.dart';
 import '../core/finance/money.dart';
+import 'add_transaction_screen.dart';
+import 'icons.dart';
 import 'widgets.dart';
+import '../core/l10n.dart';
 
 class TransactionsScreen extends StatefulWidget {
   const TransactionsScreen({super.key});
@@ -42,9 +45,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     messenger
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(
-        content: const Text('Đã xóa giao dịch'),
+        content: Text(tr('Đã xóa giao dịch', 'Transaction deleted')),
         action: SnackBarAction(
-          label: 'Hoàn tác',
+          label: tr('Hoàn tác', 'Undo'),
           onPressed: () {
             try {
               store.restoreTransaction(tx.id);
@@ -77,12 +80,12 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 96),
         children: [
-          Text('Giao dịch', style: TichiText.pageTitle),
+          Text(tr('Giao dịch', 'Transactions'), style: TichiText.pageTitle),
           const SizedBox(height: 8),
           Row(
             children: [
               IconButton(
-                tooltip: 'Tháng trước',
+                tooltip: tr('Tháng trước', 'Previous month'),
                 onPressed: () => _shiftMonth(-1),
                 icon: const Icon(Icons.chevron_left),
               ),
@@ -94,7 +97,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                 ),
               ),
               IconButton(
-                tooltip: 'Tháng sau',
+                tooltip: tr('Tháng sau', 'Next month'),
                 onPressed: isCurrentMonth ? null : () => _shiftMonth(1),
                 icon: const Icon(Icons.chevron_right),
               ),
@@ -108,7 +111,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                 children: [
                   Expanded(
                     child: _Total(
-                      label: 'Thu',
+                      label: tr('Thu', 'Income'),
                       value: formatMinor(totals.incomeMinor, base,
                           showPlus: true),
                       color: TichiColors.primary,
@@ -116,7 +119,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                   ),
                   Expanded(
                     child: _Total(
-                      label: 'Chi',
+                      label: tr('Chi', 'Expense'),
                       value: formatMinor(-totals.expenseMinor, base),
                       color: TichiColors.ink,
                     ),
@@ -127,9 +130,28 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           ),
           if (items.isEmpty)
             Padding(
-              padding: EdgeInsets.only(top: 24),
-              child: Text('Tháng này chưa có giao dịch.',
-                  textAlign: TextAlign.center, style: TichiText.caption),
+              padding: const EdgeInsets.only(top: 40),
+              child: Column(
+                children: [
+                  const IconAvatar(icon: 'bills', color: 'stone', size: 64),
+                  const SizedBox(height: 14),
+                  Text(tr('Tháng này chưa có giao dịch', 'No transactions this month'),
+                      style: TichiText.section),
+                  const SizedBox(height: 4),
+                  Text(
+                      isCurrentMonth
+                          ? tr('Bấm nút + để ghi khoản thu hoặc chi đầu tiên.', 'Tap + to add your first income or expense.')
+                          : tr('Dùng mũi tên để xem tháng khác.', 'Use the arrows to see other months.'),
+                      textAlign: TextAlign.center,
+                      style: TichiText.caption),
+                ],
+              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 12, 4, 0),
+              child: Text(tr('Chạm để sửa, vuốt sang trái để xóa', 'Tap to edit, swipe left to delete'),
+                  style: TichiText.label),
             ),
           for (final entry in groups.entries) ...[
             Padding(
@@ -152,7 +174,11 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                     child: Icon(Icons.delete_outline,
                         color: TichiColors.danger),
                   ),
-                  child: TransactionTile(tx: tx),
+                  child: InkWell(
+                    key: ValueKey('tx-${tx.id}'),
+                    onTap: () => openTransaction(context, tx),
+                    child: TransactionTile(tx: tx),
+                  ),
                 ),
             ]),
           ],

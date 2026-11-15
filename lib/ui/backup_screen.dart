@@ -15,6 +15,7 @@ import '../core/finance/finance_core.dart';
 import '../core/finance/money.dart';
 import 'icons.dart';
 import 'widgets.dart';
+import '../core/l10n.dart';
 
 class BackupScreen extends StatefulWidget {
   const BackupScreen({super.key});
@@ -45,69 +46,27 @@ class _BackupScreenState extends State<BackupScreen> {
       final bytes =
           await BackupService(store.core).createBackup(password, temp);
       final saved = await FilePicker.saveFile(
-        dialogTitle: 'Lưu file sao lưu',
+        dialogTitle: tr('Lưu file sao lưu', 'Save backup file'),
         fileName: 'tichi-saoluu-${_stamp()}.tichi',
         bytes: bytes,
       );
       if (saved != null) {
-        store.core.setSetting('last_backup_at', dateKey(DateTime.now()));
-        store.reloadAll();
-        _snack('Đã lưu file sao lưu. Hãy giữ file và mật khẩu cẩn thận.');
+        store.markBackedUp(DateTime.now());
+        _snack(tr('Đã lưu file sao lưu. Hãy giữ file và mật khẩu cẩn thận.', 'Backup saved. Keep the file and the password safe.'));
       }
     } on FinanceException catch (error) {
       _snack(friendlyError(error));
     } catch (_) {
-      _snack('Không lưu được file sao lưu.');
+      _snack(tr('Không lưu được file sao lưu.', 'Couldn\'t save the backup file.'));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
   Future<void> _restore() async {
-    final store = StoreScope.read(context);
-    final PlatformFile? file;
-    final Uint8List bytes;
-    try {
-      file = await FilePicker.pickFile();
-      if (file == null) return;
-      bytes = await file.readAsBytes();
-    } catch (_) {
-      _snack('Không mở được file.');
-      return;
-    }
-    if (!mounted) return;
-    final password = await _askPassword(context, confirm: false);
-    if (password == null) return;
     setState(() => _busy = true);
-    final service = BackupService(store.core);
     try {
-      final temp = await getTemporaryDirectory();
-      final plan = await service.openBackup(bytes, password, temp);
-      if (!mounted) {
-        service.discard(plan);
-        return;
-      }
-      final p = plan.preview;
-      final ok = await confirmAction(
-        context,
-        title: 'Khôi phục bản sao lưu?',
-        message: 'Bản sao lưu có ${p.walletCount} ví, ${p.transactionCount} '
-            'giao dịch, ${p.goalCount} mục tiêu'
-            '${p.latestTransactionDate == null ? '' : ', giao dịch mới nhất ngày ${shortDate(p.latestTransactionDate!)}'}.\n\n'
-            'Toàn bộ dữ liệu đang có trên máy sẽ được thay bằng dữ liệu này.',
-        confirmLabel: 'Khôi phục',
-      );
-      if (!ok) {
-        service.discard(plan);
-        return;
-      }
-      service.applyRestore(plan);
-      store.reloadAll();
-      _snack('Đã khôi phục dữ liệu.');
-    } on FinanceException catch (error) {
-      _snack(friendlyError(error));
-    } catch (_) {
-      _snack('Không khôi phục được. Dữ liệu hiện tại vẫn giữ nguyên.');
+      await restoreFromBackupFile(context);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -119,13 +78,13 @@ class _BackupScreenState extends State<BackupScreen> {
     try {
       final csv = BackupService(store.core).exportCsv();
       final saved = await FilePicker.saveFile(
-        dialogTitle: 'Lưu file CSV',
+        dialogTitle: tr('Lưu file CSV', 'Save CSV file'),
         fileName: 'tichi-giaodich-${_stamp()}.csv',
         bytes: Uint8List.fromList(utf8.encode(csv)),
       );
-      if (saved != null) _snack('Đã xuất danh sách giao dịch.');
+      if (saved != null) _snack(tr('Đã xuất danh sách giao dịch.', 'Transactions exported.'));
     } catch (_) {
-      _snack('Không xuất được file CSV.');
+      _snack(tr('Không xuất được file CSV.', 'Couldn\'t export the CSV file.'));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -137,7 +96,7 @@ class _BackupScreenState extends State<BackupScreen> {
     final last = store.core.getSetting('last_backup_at');
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Sao lưu và khôi phục',
+        title: Text(tr('Sao lưu và khôi phục', 'Backup & restore'),
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
       ),
       body: SafeArea(
@@ -157,9 +116,9 @@ class _BackupScreenState extends State<BackupScreen> {
                       Expanded(
                         child: Text(
                           last == null
-                              ? 'Bạn chưa sao lưu lần nào. Dữ liệu chỉ nằm trên '
-                                  'máy này; gỡ app hoặc mất máy là mất dữ liệu.'
-                              : 'Lần sao lưu gần nhất: ${shortDate(last)}.',
+                              ? tr('Bạn chưa sao lưu lần nào. Dữ liệu chỉ nằm trên '
+                                  'máy này; gỡ app hoặc mất máy là mất dữ liệu.', 'You haven\'t made a backup yet. Your data only lives on ' 'this phone; uninstalling or losing it means losing your data.')
+                              : tr('Lần sao lưu gần nhất: ${shortDate(last)}.', 'Last backup: ${shortDate(last)}.'),
                           style: const TextStyle(fontSize: 13, height: 1.45),
                         ),
                       ),
@@ -172,33 +131,33 @@ class _BackupScreenState extends State<BackupScreen> {
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: const IconAvatar(icon: 'savings', color: 'green'),
-                  title: const Text('Tạo bản sao lưu'),
-                  subtitle: const Text(
-                      'File được khóa bằng mật khẩu. Lưu vào Drive, Zalo hoặc '
-                      'máy tính.'),
+                  title: Text(tr('Tạo bản sao lưu', 'Create backup')),
+                  subtitle: Text(
+                      tr('File được khóa bằng mật khẩu. Lưu vào Drive, Zalo hoặc '
+                      'máy tính.', 'The file is locked with a password. Save it to Drive, a chat app or ' 'your computer.')),
                   onTap: _backup,
                 ),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: const IconAvatar(icon: 'transfer', color: 'blue'),
-                  title: const Text('Khôi phục từ file'),
-                  subtitle: const Text(
-                      'Thay toàn bộ dữ liệu trên máy bằng dữ liệu trong file.'),
+                  title: Text(tr('Khôi phục từ file', 'Restore from file')),
+                  subtitle: Text(
+                      tr('Thay toàn bộ dữ liệu trên máy bằng dữ liệu trong file.', 'Replace all data on this phone with the data in the file.')),
                   onTap: _restore,
                 ),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: const IconAvatar(icon: 'bills', color: 'purple'),
-                  title: const Text('Xuất giao dịch ra CSV'),
-                  subtitle: const Text(
-                      'Mở được bằng Excel hoặc Google Sheets. File không mã hóa.'),
+                  title: Text(tr('Xuất giao dịch ra CSV', 'Export transactions to CSV')),
+                  subtitle: Text(
+                      tr('Mở được bằng Excel hoặc Google Sheets. File không mã hóa.', 'Opens in Excel or Google Sheets. The file is not encrypted.')),
                   onTap: _exportCsv,
                 ),
               ]),
               const SizedBox(height: 16),
               Text(
-                'Quên mật khẩu thì không ai mở lại được file sao lưu, kể cả '
-                'nhà phát triển. Hãy ghi mật khẩu ở nơi an toàn.',
+                tr('Quên mật khẩu thì không ai mở lại được file sao lưu, kể cả '
+                'nhà phát triển. Hãy ghi mật khẩu ở nơi an toàn.', 'If you forget the password, nobody can open the backup, not even ' 'the developer. Keep the password somewhere safe.'),
                 style: TichiText.label,
               ),
             ],
@@ -210,6 +169,60 @@ class _BackupScreenState extends State<BackupScreen> {
 }
 
 /// Hỏi mật khẩu. [confirm] true thì bắt nhập hai lần (khi tạo sao lưu).
+/// Chọn file sao lưu, hỏi mật khẩu, cho xem trước rồi khôi phục. Dùng ở màn
+/// Sao lưu và ở màn chào mừng. Trả về true nếu đã khôi phục xong.
+Future<bool> restoreFromBackupFile(BuildContext context) async {
+  final store = StoreScope.read(context);
+  final messenger = ScaffoldMessenger.of(context);
+  void snack(String message) =>
+      messenger.showSnackBar(SnackBar(content: Text(message)));
+
+  final Uint8List bytes;
+  try {
+    final file = await FilePicker.pickFile();
+    if (file == null) return false;
+    bytes = await file.readAsBytes();
+  } catch (_) {
+    snack(tr('Không mở được file.', 'Couldn\'t open the file.'));
+    return false;
+  }
+  if (!context.mounted) return false;
+  final password = await _askPassword(context, confirm: false);
+  if (password == null || !context.mounted) return false;
+  final service = BackupService(store.core);
+  try {
+    final temp = await getTemporaryDirectory();
+    final plan = await service.openBackup(bytes, password, temp);
+    if (!context.mounted) {
+      service.discard(plan);
+      return false;
+    }
+    final p = plan.preview;
+    final ok = await confirmAction(
+      context,
+      title: tr('Khôi phục bản sao lưu?', 'Restore this backup?'),
+      message: tr('Bản sao lưu có ${p.walletCount} ví, ${p.transactionCount} '
+          'giao dịch, ${p.goalCount} mục tiêu'
+          '${p.latestTransactionDate == null ? '' : ', giao dịch mới nhất ngày ${shortDate(p.latestTransactionDate!)}'}.\n\n'
+          'Toàn bộ dữ liệu đang có trên máy sẽ được thay bằng dữ liệu này.', 'The backup has ${p.walletCount} wallets, ${p.transactionCount} ' 'transactions, ${p.goalCount} goals' '${p.latestTransactionDate == null ? '' : ', latest transaction on ${shortDate(p.latestTransactionDate!)}'}.\n\n' 'All data currently on this phone will be replaced with it.'),
+      confirmLabel: tr('Khôi phục', 'Restore'),
+    );
+    if (!ok) {
+      service.discard(plan);
+      return false;
+    }
+    service.applyRestore(plan);
+    store.reloadAll();
+    snack(tr('Đã khôi phục dữ liệu.', 'Data restored.'));
+    return true;
+  } on FinanceException catch (error) {
+    snack(friendlyError(error));
+  } catch (_) {
+    snack(tr('Không khôi phục được. Dữ liệu hiện tại vẫn giữ nguyên.', 'Couldn\'t restore. Your current data is unchanged.'));
+  }
+  return false;
+}
+
 Future<String?> _askPassword(BuildContext context,
     {required bool confirm}) async {
   final first = TextEditingController();
@@ -219,7 +232,7 @@ Future<String?> _askPassword(BuildContext context,
     context: context,
     builder: (dialogContext) => StatefulBuilder(
       builder: (dialogContext, setState) => AlertDialog(
-        title: Text(confirm ? 'Đặt mật khẩu cho file' : 'Nhập mật khẩu của file'),
+        title: Text(confirm ? tr('Đặt mật khẩu cho file', 'Set a password for the file') : tr('Nhập mật khẩu của file', 'Enter the file\'s password')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -228,13 +241,13 @@ Future<String?> _askPassword(BuildContext context,
               controller: first,
               obscureText: true,
               autofocus: true,
-              decoration: const InputDecoration(labelText: 'Mật khẩu'),
+              decoration: InputDecoration(labelText: tr('Mật khẩu', 'Password')),
             ),
             if (confirm)
               TextField(
                 controller: second,
                 obscureText: true,
-                decoration: const InputDecoration(labelText: 'Nhập lại mật khẩu'),
+                decoration: InputDecoration(labelText: tr('Nhập lại mật khẩu', 'Repeat password')),
               ),
             if (error != null)
               Padding(
@@ -247,8 +260,8 @@ Future<String?> _askPassword(BuildContext context,
               Padding(
                 padding: EdgeInsets.only(top: 12),
                 child: Text(
-                    'Quên mật khẩu là không mở được file. Tichi không lưu mật '
-                    'khẩu này.',
+                    tr('Quên mật khẩu là không mở được file. Tichi không lưu mật '
+                    'khẩu này.', 'If you forget the password, the file can\'t be opened. Tichi ' 'doesn\'t store it.'),
                     style: TichiText.label),
               ),
           ],
@@ -256,22 +269,22 @@ Future<String?> _askPassword(BuildContext context,
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Hủy'),
+            child: Text(tr('Hủy', 'Cancel')),
           ),
           TextButton(
             onPressed: () {
               if (first.text.length < minPasswordLength) {
                 setState(() => error =
-                    'Mật khẩu cần ít nhất $minPasswordLength ký tự.');
+                    tr('Mật khẩu cần ít nhất $minPasswordLength ký tự.', 'The password needs at least $minPasswordLength characters.'));
                 return;
               }
               if (confirm && first.text != second.text) {
-                setState(() => error = 'Hai lần nhập không giống nhau.');
+                setState(() => error = tr('Hai lần nhập không giống nhau.', 'The two passwords don\'t match.'));
                 return;
               }
               Navigator.pop(dialogContext, first.text);
             },
-            child: const Text('Tiếp tục'),
+            child: Text(tr('Tiếp tục', 'Continue')),
           ),
         ],
       ),

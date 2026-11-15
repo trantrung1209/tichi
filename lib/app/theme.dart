@@ -87,6 +87,14 @@ ThemeData _build(Brightness brightness) {
     colorScheme: scheme,
     scaffoldBackgroundColor: TichiColors.background,
     canvasColor: TichiColors.background,
+    // Chuyển màn hình: màn mới trượt vào và hiện dần, màn cũ lùi nhẹ.
+    pageTransitionsTheme: const PageTransitionsTheme(builders: {
+      TargetPlatform.android: FadeForwardsPageTransitionsBuilder(),
+    }),
+    snackBarTheme: SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    ),
     appBarTheme: AppBarTheme(
       backgroundColor: TichiColors.background,
       foregroundColor: TichiColors.ink,

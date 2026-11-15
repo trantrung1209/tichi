@@ -9,6 +9,7 @@ import '../app/theme.dart';
 import '../core/finance/finance_core.dart';
 import '../core/finance/money.dart';
 import 'icons.dart';
+import '../core/l10n.dart';
 
 /// Một dòng giao dịch: biểu tượng, tên, danh mục và ví, số tiền.
 class TransactionTile extends StatelessWidget {
@@ -28,14 +29,14 @@ class TransactionTile extends StatelessWidget {
     final String color;
     switch (tx.type) {
       case 'INCOME':
-        fallbackTitle = tx.categoryName ?? 'Khoản thu';
+        fallbackTitle = tx.categoryName ?? tr('Khoản thu', 'Income');
         subtitle = '${tx.categoryName ?? 'Thu'} · ${tx.destinationWalletName}';
         amountText = formatMinor(tx.amountMinor, tx.currency, showPlus: true);
         amountColor = TichiColors.primary;
         icon = tx.categoryIcon ?? 'salary';
         color = tx.categoryColor ?? 'green';
       case 'EXPENSE':
-        fallbackTitle = tx.categoryName ?? 'Khoản chi';
+        fallbackTitle = tx.categoryName ?? tr('Khoản chi', 'Expense');
         subtitle = '${tx.categoryName ?? 'Chi'} · ${tx.sourceWalletName}';
         amountText = formatMinor(-tx.amountMinor, tx.currency);
         amountColor = TichiColors.ink;
@@ -43,8 +44,8 @@ class TransactionTile extends StatelessWidget {
         color = tx.categoryColor ?? 'stone';
       default:
         fallbackTitle = isSaving
-            ? 'Tiết kiệm'
-            : (isWithdraw ? 'Rút tiết kiệm' : 'Chuyển ví');
+            ? tr('Tiết kiệm', 'Savings')
+            : (isWithdraw ? tr('Rút tiết kiệm', 'Savings withdrawal') : tr('Chuyển ví', 'Transfer'));
         subtitle = '${tx.sourceWalletName} → ${tx.destinationWalletName}';
         amountText = formatMinor(tx.amountMinor, tx.currency);
         amountColor = TichiColors.muted;
@@ -123,13 +124,50 @@ class ProgressBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(height / 2),
-      child: LinearProgressIndicator(
-        value: percent.clamp(0, 100) / 100,
-        minHeight: height,
-        backgroundColor: TichiColors.track,
-        color: color ?? TichiColors.primary,
+    // Thanh chạy dần tới mức mới thay vì nhảy ngay.
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: percent.clamp(0, 100) / 100),
+      duration: const Duration(milliseconds: 700),
+      curve: Curves.easeOutCubic,
+      builder: (context, value, _) => ClipRRect(
+        borderRadius: BorderRadius.circular(height / 2),
+        child: LinearProgressIndicator(
+          value: value,
+          minHeight: height,
+          backgroundColor: TichiColors.track,
+          color: color ?? TichiColors.primary,
+        ),
+      ),
+    );
+  }
+}
+
+/// Số tiền lớn có hiệu ứng đếm tới số mới. Số quá dài thì tự thu nhỏ.
+class AnimatedAmount extends StatelessWidget {
+  const AnimatedAmount({
+    super.key,
+    required this.minor,
+    required this.currency,
+    this.style,
+    this.textKey,
+  });
+
+  final int minor;
+  final String currency;
+  final TextStyle? style;
+  final Key? textKey;
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: minor.toDouble()),
+      duration: const Duration(milliseconds: 800),
+      curve: Curves.easeOutCubic,
+      builder: (context, value, _) => FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: Text(formatMinor(value.round(), currency),
+            key: textKey, maxLines: 1, style: style),
       ),
     );
   }
@@ -225,6 +263,17 @@ class MoneyInputFormatter extends TextInputFormatter {
         ? newValue.selection.end.clamp(0, text.length)
         : text.length;
 
+    // Nhiều bàn phím chỉ có dấu phẩy cho phần lẻ. Với USD, dấu phẩy vừa gõ
+    // được hiểu là dấu thập phân (12,5 → 12.5), không phải dấu hàng nghìn.
+    if (currency == 'USD' &&
+        text.length == oldValue.text.length + 1 &&
+        cursor > 0 &&
+        text[cursor - 1] == ',') {
+      final hasDot = text.contains('.');
+      text = text.replaceRange(cursor - 1, cursor, hasDot ? '' : '.');
+      if (hasDot) cursor -= 1;
+    }
+
     // Xóa lùi đúng vào dấu ngăn cách: xóa luôn chữ số đứng trước nó, nếu không
     // dấu sẽ hiện lại ngay và trông như phím xóa không chạy.
     final separator = currency == 'USD' ? ',' : '.';
@@ -243,6 +292,8 @@ class MoneyInputFormatter extends TextInputFormatter {
       if (_isSignificant(text[i])) significantBefore++;
     }
     final formatted = groupAmountInput(text, currency);
+    // Rung nhẹ mỗi lần số tiền thay đổi khi gõ, như bấm phím máy tính.
+    if (formatted != oldValue.text) HapticFeedback.selectionClick();
     var offset = 0;
     var seen = 0;
     while (offset < formatted.length && seen < significantBefore) {
@@ -339,7 +390,8 @@ class FormError extends StatelessWidget {
 
 /// Bảng chọn ví từ dưới lên. Trả về mã ví đã chọn hoặc null.
 Future<String?> pickWallet(BuildContext context, List<WalletInfo> wallets,
-    {String? selectedId, String title = 'Chọn ví'}) {
+    {String? selectedId, String? title}) {
+  final heading = title ?? tr('Chọn ví', 'Choose wallet');
   return showModalBottomSheet<String>(
     context: context,
     showDragHandle: true,
@@ -353,19 +405,19 @@ Future<String?> pickWallet(BuildContext context, List<WalletInfo> wallets,
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-              child: Text(title, style: TichiText.section),
+              child: Text(heading, style: TichiText.section),
             ),
             if (wallets.isEmpty)
               Padding(
                 padding: EdgeInsets.all(20),
-                child: Text('Chưa có ví phù hợp.', style: TichiText.caption),
+                child: Text(tr('Chưa có ví phù hợp.', 'No matching wallets.'), style: TichiText.caption),
               ),
             for (final wallet in wallets)
               ListTile(
                 leading: IconAvatar(icon: wallet.icon, color: wallet.color),
                 title: Text(wallet.name),
                 subtitle: Text(
-                    'Số dư ${formatMinor(wallet.balanceMinor, wallet.currencyCode)}'),
+                    tr('Số dư ${formatMinor(wallet.balanceMinor, wallet.currencyCode)}', 'Balance ${formatMinor(wallet.balanceMinor, wallet.currencyCode)}')),
                 trailing: wallet.id == selectedId
                     ? Icon(Icons.check, color: TichiColors.primary)
                     : null,
@@ -391,7 +443,7 @@ Future<bool> confirmAction(BuildContext context,
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(dialogContext, false),
-          child: const Text('Hủy'),
+          child: Text(tr('Hủy', 'Cancel')),
         ),
         TextButton(
           onPressed: () => Navigator.pop(dialogContext, true),
@@ -417,7 +469,7 @@ Future<bool> showRateDialog(BuildContext context) async {
     context: context,
     builder: (dialogContext) => StatefulBuilder(
       builder: (dialogContext, setState) => AlertDialog(
-        title: const Text('Tỷ giá USD'),
+        title: Text(tr('Tỷ giá USD', 'USD exchange rate')),
         content: TextField(
           key: const Key('rate-field'),
           controller: controller,
@@ -425,27 +477,27 @@ Future<bool> showRateDialog(BuildContext context) async {
           keyboardType: TextInputType.number,
           inputFormatters: moneyFormatters('VND'),
           decoration: InputDecoration(
-            labelText: 'Số đồng cho 1 USD',
-            hintText: 'Ví dụ 26.300',
+            labelText: tr('Số đồng cho 1 USD', 'Dong per 1 USD'),
+            hintText: tr('Ví dụ 26.300', 'e.g. 26,300'),
             errorText: error,
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Hủy'),
+            child: Text(tr('Hủy', 'Cancel')),
           ),
           TextButton(
             onPressed: () {
               final rate = parseMinor(controller.text, 'VND');
               if (rate == null || rate == 0) {
-                setState(() => error = 'Nhập một số lớn hơn 0');
+                setState(() => error = tr('Nhập một số lớn hơn 0', 'Enter a number greater than 0'));
                 return;
               }
               store.setUsdVndRate(rate);
               Navigator.pop(dialogContext, true);
             },
-            child: const Text('Lưu'),
+            child: Text(tr('Lưu', 'Save')),
           ),
         ],
       ),

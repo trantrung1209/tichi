@@ -1,6 +1,8 @@
 /// Đổi tiền, định dạng và đọc số tiền. Chỉ dùng số nguyên, không dùng double.
 library;
 
+import '../l10n.dart';
+
 /// Đổi [amountMinor] từ loại tiền [from] sang [to].
 ///
 /// [usdVndRate] là số đồng cho 1 USD, do người dùng nhập. Trả về null khi cần
@@ -89,16 +91,41 @@ String dayLabel(String key, DateTime today) {
   final todayKey = dateKey(today);
   final yesterdayKey =
       dateKey(DateTime(today.year, today.month, today.day - 1));
+  if (L10n.en) {
+    final enShort = '${_monthsEn[parts[1] - 1]} ${parts[2]}';
+    if (key == todayKey) return 'Today, $enShort';
+    if (key == yesterdayKey) return 'Yesterday, $enShort';
+    return '${_weekdaysEn[date.weekday - 1]}, $enShort';
+  }
   if (key == todayKey) return 'Hôm nay, $short';
   if (key == yesterdayKey) return 'Hôm qua, $short';
   return '${_weekdays[date.weekday - 1]}, $short';
 }
 
-String monthLabel(int year, int month) => 'Tháng $month, $year';
+const List<String> _weekdaysEn = [
+  'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+];
 
-/// "2027-06-30" → "30/06/2027".
+const List<String> _monthsEn = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+const List<String> _monthsEnFull = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+/// "Tháng 11, 2026" hoặc "November 2026".
+String monthLabel(int year, int month) =>
+    L10n.en ? '${_monthsEnFull[month - 1]} $year' : 'Tháng $month, $year';
+
+/// "2027-06-30" → "30/06/2027" hoặc "Jun 30, 2027".
 String shortDate(String key) {
   final parts = key.split('-');
+  if (L10n.en) {
+    return '${_monthsEn[int.parse(parts[1]) - 1]} ${int.parse(parts[2])}, ${parts[0]}';
+  }
   return '${parts[2]}/${parts[1]}/${parts[0]}';
 }
 
@@ -116,7 +143,7 @@ String amountText(int minor, String currency) {
 
 /// Định dạng lại chữ người dùng đang gõ trong ô số tiền.
 ///
-/// VND: chỉ giữ chữ số, tối đa 15 chữ số, thêm dấu chấm mỗi 3 số
+/// VND: chỉ giữ chữ số, tối đa 14 chữ số, thêm dấu chấm mỗi 3 số
 /// ("1000000" → "1.000.000"). USD: dấu chấm là phần lẻ (tối đa 2 số), dấu
 /// phẩy ngăn hàng nghìn ("1234.5" → "1,234.5"). Chuỗi rỗng giữ nguyên rỗng.
 String groupAmountInput(String raw, String currency) {
@@ -126,7 +153,7 @@ String groupAmountInput(String raw, String currency) {
     var whole = dot < 0 ? cleaned : cleaned.substring(0, dot);
     var fraction =
         dot < 0 ? '' : cleaned.substring(dot + 1).replaceAll('.', '');
-    if (whole.length > 13) whole = whole.substring(0, 13);
+    if (whole.length > 12) whole = whole.substring(0, 12);
     if (fraction.length > 2) fraction = fraction.substring(0, 2);
     whole = whole.replaceFirst(RegExp(r'^0+(?=\d)'), '');
     if (whole.isEmpty && dot >= 0) whole = '0';
@@ -134,7 +161,7 @@ String groupAmountInput(String raw, String currency) {
     return dot < 0 ? grouped : '$grouped.$fraction';
   }
   var digits = raw.replaceAll(RegExp(r'\D'), '');
-  if (digits.length > 15) digits = digits.substring(0, 15);
+  if (digits.length > 14) digits = digits.substring(0, 14);
   if (digits.isEmpty) return '';
   return _group(int.parse(digits), '.');
 }

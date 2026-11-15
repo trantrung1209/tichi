@@ -23,6 +23,7 @@ import 'package:sqlite3/sqlite3.dart';
 
 import '../finance/finance_core.dart';
 import '../finance/schema.dart';
+import '../l10n.dart';
 
 const List<int> _magic = [0x54, 0x49, 0x43, 0x48, 0x49, 0x42, 0x4B, 0x31];
 const int _headerLength = 8 + 4 + 16 + 12 + 16;
@@ -137,7 +138,7 @@ class BackupService {
         );
         return RestorePlan._(path, preview);
       } finally {
-        source.dispose();
+        source.close();
       }
     } catch (_) {
       final file = File(path);
@@ -189,22 +190,22 @@ class BackupService {
     final rows = _core.transactions();
     final buffer = StringBuffer('﻿')
       ..writeln(_csvRow([
-        'Ngày',
-        'Loại',
-        'Số tiền',
-        'Loại tiền',
-        'Danh mục',
-        'Ví nguồn',
-        'Ví nhận',
-        'Ghi chú',
+        tr('Ngày', 'Date'),
+        tr('Loại', 'Type'),
+        tr('Số tiền', 'Amount'),
+        tr('Loại tiền', 'Currency'),
+        tr('Danh mục', 'Category'),
+        tr('Ví nguồn', 'From wallet'),
+        tr('Ví nhận', 'To wallet'),
+        tr('Ghi chú', 'Note'),
       ]));
     for (final tx in rows.reversed) {
       final type = switch (tx.type) {
-        'INCOME' => 'Thu',
-        'EXPENSE' => 'Chi',
+        'INCOME' => tr('Thu', 'Income'),
+        'EXPENSE' => tr('Chi', 'Expense'),
         _ => tx.destinationIsSavings
-            ? 'Tiết kiệm'
-            : (tx.sourceIsSavings ? 'Rút tiết kiệm' : 'Chuyển ví'),
+            ? tr('Tiết kiệm', 'Saving')
+            : (tx.sourceIsSavings ? tr('Rút tiết kiệm', 'Withdrawal') : tr('Chuyển ví', 'Transfer')),
       };
       buffer.writeln(_csvRow([
         tx.date,

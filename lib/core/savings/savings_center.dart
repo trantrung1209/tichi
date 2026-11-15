@@ -453,13 +453,35 @@ class SavingsCenter {
 
   /// Số ngày liên tiếp có ít nhất một lần tiết kiệm thật (chuyển ví), cho bất
   /// kỳ mục tiêu nào. Hôm nay chưa tiết kiệm thì chuỗi vẫn giữ từ hôm qua.
-  int currentStreak(String today) {
+  ///
+  /// [period] là 'daily' (đếm ngày), 'weekly' (đếm tuần, tuần bắt đầu thứ
+  /// Hai) hoặc 'monthly' (đếm tháng). Kỳ hiện tại chưa góp thì vẫn tính
+  /// chuỗi tới kỳ trước, để chuỗi không bị đứt khi kỳ này chưa kết thúc.
+  int currentStreak(String today, {String period = 'daily'}) {
     final rows = _db.select(
       'SELECT DISTINCT c.contribution_date AS d FROM savings_contributions c '
       'JOIN transactions t ON t.id = c.transaction_id '
       'WHERE t.deleted_at IS NULL',
     );
     final days = {for (final row in rows) row['d'] as String};
+    if (period == 'weekly' || period == 'monthly') {
+      final weekly = period == 'weekly';
+      DateTime start(DateTime d) => weekly
+          ? d.subtract(Duration(days: d.weekday - 1))
+          : DateTime.utc(d.year, d.month, 1);
+      DateTime previous(DateTime d) => weekly
+          ? d.subtract(const Duration(days: 7))
+          : DateTime.utc(d.year, d.month - 1, 1);
+      final periods = {for (final d in days) _formatDate(start(_parseDate(d)))};
+      var cursor = start(_parseDate(today));
+      if (!periods.contains(_formatDate(cursor))) cursor = previous(cursor);
+      var count = 0;
+      while (periods.contains(_formatDate(cursor))) {
+        count++;
+        cursor = previous(cursor);
+      }
+      return count;
+    }
     var cursor = _parseDate(today);
     if (!days.contains(_formatDate(cursor))) {
       cursor = cursor.subtract(const Duration(days: 1));

@@ -14,6 +14,7 @@ import '../core/finance/money.dart';
 import '../core/savings/savings_center.dart';
 import 'icons.dart';
 import 'widgets.dart';
+import '../core/l10n.dart';
 
 enum SavingsMode { contribute, withdraw, allocate }
 
@@ -152,14 +153,14 @@ class _SavingsMoveScreenState extends State<SavingsMoveScreen> {
 
   void _confirm(AppStore store, GoalProgress goal) {
     final amount = parseMinor(_amount.text, goal.currencyCode);
-    if (amount == null || amount <= 0) return _fail('Nhập số tiền lớn hơn 0.');
+    if (amount == null || amount <= 0) return _fail(tr('Nhập số tiền lớn hơn 0.', 'Enter an amount greater than 0.'));
     final date = dateKey(DateTime.now());
     setState(() => _saving = true);
     try {
       switch (_mode) {
         case SavingsMode.contribute:
           final walletId = _walletId;
-          if (walletId == null) return _fail('Chọn ví lấy tiền.');
+          if (walletId == null) return _fail(tr('Chọn ví lấy tiền.', 'Choose a wallet to take money from.'));
           store.contribute(
               requestId: _requestId,
               goalId: goal.goalId,
@@ -168,7 +169,7 @@ class _SavingsMoveScreenState extends State<SavingsMoveScreen> {
               date: date);
         case SavingsMode.withdraw:
           final walletId = _walletId;
-          if (walletId == null) return _fail('Chọn ví nhận tiền.');
+          if (walletId == null) return _fail(tr('Chọn ví nhận tiền.', 'Choose a wallet to receive the money.'));
           store.withdraw(
               requestId: _requestId,
               goalId: goal.goalId,
@@ -193,9 +194,9 @@ class _SavingsMoveScreenState extends State<SavingsMoveScreen> {
   Widget build(BuildContext context) {
     final store = StoreScope.of(context);
     final title = switch (_mode) {
-      SavingsMode.contribute => 'Tiết kiệm ngay',
-      SavingsMode.withdraw => 'Rút tiền tiết kiệm',
-      SavingsMode.allocate => 'Chia tiền có sẵn',
+      SavingsMode.contribute => tr('Tiết kiệm ngay', 'Save now'),
+      SavingsMode.withdraw => tr('Rút tiền tiết kiệm', 'Withdraw savings'),
+      SavingsMode.allocate => tr('Chia tiền có sẵn', 'Assign existing money'),
     };
     final goalId = _goalId;
     if (goalId == null) {
@@ -203,7 +204,7 @@ class _SavingsMoveScreenState extends State<SavingsMoveScreen> {
         appBar: AppBar(title: Text(title)),
         body: Padding(
           padding: EdgeInsets.all(20),
-          child: Text('Chưa có mục tiêu phù hợp.', style: TichiText.caption),
+          child: Text(tr('Chưa có mục tiêu phù hợp.', 'No matching goals yet.'), style: TichiText.caption),
         ),
       );
     }
@@ -223,30 +224,30 @@ class _SavingsMoveScreenState extends State<SavingsMoveScreen> {
     switch (_mode) {
       case SavingsMode.contribute:
         after = goal.savedMinor + amount;
-        explain = 'Đây là một lần chuyển ví: ${wallet?.name ?? 'ví nguồn'} '
+        explain = tr('Đây là một lần chuyển ví: ${wallet?.name ?? 'ví nguồn'} '
             'giảm, ${vault.name} tăng. Tổng tài sản không đổi và khoản này '
-            'không tính là chi tiêu.';
+            'không tính là chi tiêu.', 'This is a transfer: ${wallet?.name ?? 'the source wallet'} ' 'goes down, ${vault.name} goes up. Your total balance stays the same and this ' 'is not counted as spending.');
       case SavingsMode.withdraw:
         after = goal.savedMinor - amount;
-        explain = 'Đây là chuyển ví, không tính là thu nhập. Chỉ mục tiêu '
-            '"${goal.name}" bị giảm; các mục tiêu khác giữ nguyên.';
+        explain = tr('Đây là chuyển ví, không tính là thu nhập. Chỉ mục tiêu '
+            '"${goal.name}" bị giảm; các mục tiêu khác giữ nguyên.', 'This is a transfer, not income. Only the goal ' '"${goal.name}" goes down; other goals stay the same.');
       case SavingsMode.allocate:
         after = goal.savedMinor + amount;
-        explain = 'Tiền đã nằm sẵn trong ${vault.name}, chỉ gắn cho mục tiêu. '
-            'Không có chuyển ví. Còn ${formatMinor(free, c)} chưa gắn mục tiêu.';
+        explain = tr('Tiền đã nằm sẵn trong ${vault.name}, chỉ gắn cho mục tiêu. '
+            'Không có chuyển ví. Còn ${formatMinor(free, c)} chưa gắn mục tiêu.', 'The money is already in ${vault.name}; it\'s just assigned to the goal. ' 'No transfer. ${formatMinor(free, c)} still unassigned.');
     }
     final beforePercent = goal.percent;
     final afterPercent = after <= 0 ? 0 : after * 100 ~/ goal.targetMinor;
     final confirmLabel = switch (_mode) {
-      SavingsMode.contribute => 'Xác nhận tiết kiệm',
-      SavingsMode.withdraw => 'Xác nhận rút',
-      SavingsMode.allocate => 'Gắn cho mục tiêu',
+      SavingsMode.contribute => tr('Xác nhận tiết kiệm', 'Confirm saving'),
+      SavingsMode.withdraw => tr('Xác nhận rút', 'Confirm withdrawal'),
+      SavingsMode.allocate => tr('Gắn cho mục tiêu', 'Assign to goal'),
     };
 
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
-          tooltip: 'Đóng',
+          tooltip: tr('Đóng', 'Close'),
           icon: const Icon(Icons.close),
           onPressed: () => Navigator.of(context).pop(),
         ),
@@ -259,7 +260,7 @@ class _SavingsMoveScreenState extends State<SavingsMoveScreen> {
           children: [
             GroupCard(children: [
               PickerRow(
-                label: 'Mục tiêu',
+                label: tr('Mục tiêu', 'Goal'),
                 value: goal.name,
                 leading: IconAvatar(icon: goal.icon, color: 'emerald', size: 28),
                 onTap: widget.goalId == null ? () => _chooseGoal(store) : null,
@@ -277,28 +278,28 @@ class _SavingsMoveScreenState extends State<SavingsMoveScreen> {
             GroupCard(children: [
               if (_mode == SavingsMode.contribute)
                 PickerRow(
-                  label: 'Lấy từ ví',
+                  label: tr('Lấy từ ví', 'Take from'),
                   value: wallet == null
-                      ? 'Chọn ví'
+                      ? tr('Chọn ví', 'Choose wallet')
                       : '${wallet.name} · ${formatMinor(wallet.balanceMinor, c)}',
                   onTap: () async {
                     final picked = await pickWallet(context, wallets,
-                        selectedId: _walletId, title: 'Lấy từ ví');
+                        selectedId: _walletId, title: tr('Lấy từ ví', 'Take from'));
                     if (picked != null) setState(() => _walletId = picked);
                   },
                 ),
               PickerRow(
-                label: _mode == SavingsMode.withdraw ? 'Rút từ' : 'Chuyển vào',
+                label: _mode == SavingsMode.withdraw ? tr('Rút từ', 'Withdraw from') : tr('Chuyển vào', 'Move into'),
                 value: vault.name,
                 onTap: null,
               ),
               if (_mode == SavingsMode.withdraw)
                 PickerRow(
-                  label: 'Chuyển về ví',
-                  value: wallet?.name ?? 'Chọn ví',
+                  label: tr('Chuyển về ví', 'Send to wallet'),
+                  value: wallet?.name ?? tr('Chọn ví', 'Choose wallet'),
                   onTap: () async {
                     final picked = await pickWallet(context, wallets,
-                        selectedId: _walletId, title: 'Chuyển về ví');
+                        selectedId: _walletId, title: tr('Chuyển về ví', 'Send to wallet'));
                     if (picked != null) setState(() => _walletId = picked);
                   },
                 ),
@@ -310,16 +311,16 @@ class _SavingsMoveScreenState extends State<SavingsMoveScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Tiến độ ${goal.name}', style: TichiText.label),
+                    Text(tr('Tiến độ ${goal.name}', 'Progress of ${goal.name}'), style: TichiText.label),
                     const SizedBox(height: 10),
                     _ProgressRow(
-                      label: 'Trước',
+                      label: tr('Trước', 'Before'),
                       value: '${formatMinor(goal.savedMinor, c)} · $beforePercent%',
                       percent: beforePercent,
                     ),
                     const SizedBox(height: 10),
                     _ProgressRow(
-                      label: 'Sau',
+                      label: tr('Sau', 'After'),
                       value: '${formatMinor(after < 0 ? 0 : after, c)} · $afterPercent%',
                       percent: afterPercent,
                       color: _mode == SavingsMode.withdraw

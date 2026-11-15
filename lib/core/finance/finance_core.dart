@@ -16,6 +16,10 @@ import 'package:sqlite3/sqlite3.dart';
 
 import 'schema.dart';
 
+/// Số tiền lớn nhất cho một giao dịch, theo đơn vị nhỏ nhất (100.000 tỷ đồng
+/// hoặc 1.000 tỷ USD). Giới hạn này giữ cho các phép cộng không bị tràn số.
+const int maxAmountMinor = 100000000000000;
+
 /// Lỗi nghiệp vụ. [code] dùng để giao diện chọn thông báo phù hợp.
 class FinanceException implements Exception {
   FinanceException(this.code, this.message);
@@ -103,6 +107,9 @@ class TransactionView {
     required this.destinationWalletName,
     required this.destinationCurrency,
     required this.destinationIsSavings,
+    this.sourceWalletId,
+    this.destinationWalletId,
+    this.categoryId,
   });
 
   final String id;
@@ -120,6 +127,12 @@ class TransactionView {
   final String? destinationWalletName;
   final String? destinationCurrency;
   final bool destinationIsSavings;
+  final String? sourceWalletId;
+  final String? destinationWalletId;
+  final String? categoryId;
+
+  /// Là lần góp hoặc rút tiết kiệm (chạm vào ví tiết kiệm).
+  bool get isSavingsMove => sourceIsSavings || destinationIsSavings;
 
   /// Loại tiền của [amountMinor].
   String get currency =>
@@ -199,7 +212,7 @@ class FinanceCore {
   String? transactionIdForRequest(String requestId) =>
       _findByRequestId(requestId);
 
-  void close() => _db.dispose();
+  void close() => _db.close();
 
   // ---------------------------------------------------------------- Ví
 
@@ -265,6 +278,42 @@ class FinanceCore {
       _db.execute('UPDATE wallets SET opening_balance_minor = ? WHERE id = ?',
           [amountMinor, walletId]);
       _requireSavingsNonNegative(walletId);
+      for (final listener in _listeners) {
+        listener({walletId});
+      }
+    });
+  }
+
+  /// Ví đã được dùng chưa: có giao dịch (kể cả đã xóa, vì vẫn hoàn tác
+  /// được) hoặc có mục tiêu tiết kiệm gắn vào.
+  bool walletInUse(String walletId) => _db.select(
+      'SELECT 1 FROM transactions WHERE source_wallet_id = ?1 '
+      'OR destination_wallet_id = ?1 '
+      'UNION ALL SELECT 1 FROM savings_goals WHERE savings_wallet_id = ?1 '
+      'LIMIT 1',
+      [walletId]).isNotEmpty;
+
+  /// Đổi loại tiền của ví chưa dùng, kèm số dư ban đầu theo loại tiền mới.
+  /// Ví đã có giao dịch thì không đổi được, để số liệu cũ không bị sai.
+  void setWalletCurrency(String walletId, String currencyCode,
+      {int openingBalanceMinor = 0}) {
+    if (!currencyExponent.containsKey(currencyCode)) {
+      throw FinanceException(
+          'unsupported_currency', 'Chưa hỗ trợ loại tiền $currencyCode');
+    }
+    if (openingBalanceMinor < 0) {
+      throw FinanceException('invalid_amount', 'Số dư ban đầu không được âm');
+    }
+    _inTransaction(() {
+      _walletRow(walletId);
+      if (walletInUse(walletId)) {
+        throw FinanceException('wallet_in_use',
+            'Ví đã có giao dịch nên không đổi được loại tiền');
+      }
+      _db.execute(
+          'UPDATE wallets SET currency_code = ?, opening_balance_minor = ? '
+          'WHERE id = ?',
+          [currencyCode, openingBalanceMinor, walletId]);
       for (final listener in _listeners) {
         listener({walletId});
       }
@@ -416,7 +465,8 @@ class FinanceCore {
   List<TransactionView> transactions({String? monthPrefix, int? limit}) {
     final rows = _db.select(
       'SELECT t.id, t.type, t.amount_minor, t.destination_amount_minor, '
-      't.transaction_date, t.note, c.name AS category_name, '
+      't.transaction_date, t.note, t.source_wallet_id, '
+      't.destination_wallet_id, t.category_id, c.name AS category_name, '
       'c.icon AS category_icon, c.color AS category_color, '
       'sw.name AS source_name, sw.currency_code AS source_currency, '
       'sw.type AS source_type, dw.name AS destination_name, '
@@ -449,6 +499,9 @@ class FinanceCore {
           destinationWalletName: row['destination_name'] as String?,
           destinationCurrency: row['destination_currency'] as String?,
           destinationIsSavings: row['destination_type'] == 'SAVINGS',
+          sourceWalletId: row['source_wallet_id'] as String?,
+          destinationWalletId: row['destination_wallet_id'] as String?,
+          categoryId: row['category_id'] as String?,
         ),
     ];
   }
@@ -612,6 +665,113 @@ class FinanceCore {
       );
       debugHook?.call('transfer_inserted');
       return id;
+    });
+  }
+
+  /// Sửa một khoản thu, chi hoặc chuyển ví thường. Không đổi được loại giao
+  /// dịch. Lần góp và rút tiết kiệm không sửa ở đây: xóa rồi làm lại, để liên
+  /// kết với mục tiêu luôn đúng.
+  ///
+  /// Thu, chi: [walletId] là ví của giao dịch. Chuyển ví: [walletId] là ví
+  /// nguồn, [toWalletId] là ví nhận.
+  void updateTransaction(
+    String transactionId, {
+    required String walletId,
+    String? toWalletId,
+    required int amountMinor,
+    int? destinationAmountMinor,
+    required String date,
+    String? categoryId,
+    String? note,
+  }) {
+    _inTransaction(() {
+      final rows = _db.select(
+          'SELECT id, type, source_wallet_id, destination_wallet_id, '
+          'deleted_at FROM transactions WHERE id = ?',
+          [transactionId]);
+      if (rows.isEmpty) {
+        throw FinanceException(
+            'transaction_not_found', 'Không tìm thấy giao dịch');
+      }
+      final old = rows.first;
+      if (old['deleted_at'] != null) {
+        throw FinanceException(
+            'transaction_deleted', 'Giao dịch này đã bị xóa');
+      }
+      final linked = _db.select(
+          'SELECT 1 FROM savings_contributions WHERE transaction_id = ?1 '
+          'UNION ALL SELECT 1 FROM savings_withdrawals WHERE transaction_id = ?1',
+          [transactionId]);
+      final oldWallets = [
+        old['source_wallet_id'] as String?,
+        old['destination_wallet_id'] as String?,
+      ];
+      final touchesSavings = oldWallets
+          .whereType<String>()
+          .any((id) => _walletRow(id)['type'] == 'SAVINGS');
+      if (linked.isNotEmpty || touchesSavings) {
+        throw FinanceException('savings_not_editable',
+            'Lần góp hoặc rút tiết kiệm không sửa được. Hãy xóa rồi làm lại.');
+      }
+      _requirePositive(amountMinor);
+      if (categoryId != null) _categoryRow(categoryId);
+      final type = old['type'] as String;
+      final wallet = _wallet(walletId);
+      switch (type) {
+        case 'INCOME':
+          _requireNotSavings(wallet, 'income_into_savings',
+              'Tiền vào ví tiết kiệm phải đi qua chức năng Tiết kiệm');
+          _db.execute(
+              'UPDATE transactions SET destination_wallet_id = ?, '
+              'category_id = ?, amount_minor = ?, transaction_date = ?, '
+              'note = ? WHERE id = ?',
+              [walletId, categoryId, amountMinor, date, note, transactionId]);
+        case 'EXPENSE':
+          _requireNotSavings(wallet, 'expense_from_savings',
+              'Không ghi chi tiêu trực tiếp từ ví tiết kiệm');
+          _db.execute(
+              'UPDATE transactions SET source_wallet_id = ?, '
+              'category_id = ?, amount_minor = ?, transaction_date = ?, '
+              'note = ? WHERE id = ?',
+              [walletId, categoryId, amountMinor, date, note, transactionId]);
+        default:
+          if (toWalletId == null || toWalletId == walletId) {
+            throw FinanceException(
+                'same_wallet', 'Ví nguồn và ví nhận phải khác nhau');
+          }
+          final to = _wallet(toWalletId);
+          _requireNotSavings(wallet, 'transfer_from_savings',
+              'Tiền chỉ ra khỏi ví tiết kiệm qua chức năng Rút tiền');
+          _requireNotSavings(to, 'transfer_into_savings',
+              'Tiền vào ví tiết kiệm phải đi qua chức năng Tiết kiệm');
+          final int received;
+          if (wallet['currency_code'] == to['currency_code']) {
+            received = amountMinor;
+          } else {
+            if (destinationAmountMinor == null) {
+              throw FinanceException('destination_amount_required',
+                  'Khác loại tiền thì phải nhập số tiền ví nhận được');
+            }
+            _requirePositive(destinationAmountMinor);
+            received = destinationAmountMinor;
+          }
+          _db.execute(
+              'UPDATE transactions SET source_wallet_id = ?, '
+              'destination_wallet_id = ?, amount_minor = ?, '
+              'destination_amount_minor = ?, transaction_date = ?, note = ? '
+              'WHERE id = ?',
+              [walletId, toWalletId, amountMinor, received, date, note,
+                transactionId]);
+      }
+      final changed = <String>{
+        ...oldWallets.whereType<String>(),
+        walletId,
+        if (toWalletId != null && type == 'TRANSFER') toWalletId,
+      };
+      for (final listener in _listeners) {
+        listener(changed);
+      }
+      debugHook?.call('transaction_updated');
     });
   }
 
@@ -780,6 +940,9 @@ class FinanceCore {
   void _requirePositive(int amountMinor) {
     if (amountMinor <= 0) {
       throw FinanceException('invalid_amount', 'Số tiền phải lớn hơn 0');
+    }
+    if (amountMinor > maxAmountMinor) {
+      throw FinanceException('amount_too_large', 'Số tiền quá lớn');
     }
   }
 

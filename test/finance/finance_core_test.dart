@@ -464,4 +464,142 @@ void main() {
       expect(core.walletBalance(bank), 19850000);
     });
   });
+
+  group('Sửa giao dịch', () {
+    test('sửa khoản chi: đổi số tiền, ví, ngày thì số dư tính lại đúng', () {
+      final id = core.addExpense(
+          requestId: nextRequest(),
+          walletId: cash,
+          amountMinor: 50000,
+          date: '2026-11-12');
+      core.updateTransaction(id,
+          walletId: bank,
+          amountMinor: 80000,
+          date: '2026-11-10',
+          note: 'Ăn trưa');
+      expect(core.walletBalance(cash), 0);
+      expect(core.walletBalance(bank), 20000000 - 80000);
+      final tx = core.transactions().single;
+      expect(tx.amountMinor, 80000);
+      expect(tx.date, '2026-11-10');
+      expect(tx.note, 'Ăn trưa');
+      expect(tx.sourceWalletId, bank);
+      expect(core.activeTransactionCount(), 1);
+    });
+
+    test('sửa khoản thu thì báo cáo tháng cập nhật', () {
+      final id = core.addIncome(
+          requestId: nextRequest(),
+          walletId: cash,
+          amountMinor: 1000000,
+          date: '2026-11-01');
+      core.updateTransaction(id,
+          walletId: cash, amountMinor: 1500000, date: '2026-10-31');
+      expect(
+          core
+              .monthSummary(year: 2026, month: 11, currencyCode: 'VND')
+              .incomeMinor,
+          0);
+      expect(
+          core
+              .monthSummary(year: 2026, month: 10, currencyCode: 'VND')
+              .incomeMinor,
+          1500000);
+    });
+
+    test('sửa chuyển ví: vẫn không tính là thu chi, tổng tài sản giữ nguyên',
+        () {
+      final before = core.totalAssetsByCurrency()['VND'];
+      final id = core.transfer(
+          requestId: nextRequest(),
+          fromWalletId: bank,
+          toWalletId: cash,
+          amountMinor: 100000,
+          date: '2026-11-12');
+      core.updateTransaction(id,
+          walletId: bank,
+          toWalletId: cash,
+          amountMinor: 300000,
+          date: '2026-11-12');
+      expect(core.walletBalance(cash), 300000);
+      expect(core.walletBalance(bank), 20000000 - 300000);
+      expect(core.totalAssetsByCurrency()['VND'], before);
+      final month =
+          core.monthSummary(year: 2026, month: 11, currencyCode: 'VND');
+      expect(month.incomeMinor, 0);
+      expect(month.expenseMinor, 0);
+    });
+
+    test('chặn sửa chuyển ví thành cùng một ví hoặc vào ví tiết kiệm', () {
+      final id = core.transfer(
+          requestId: nextRequest(),
+          fromWalletId: bank,
+          toWalletId: cash,
+          amountMinor: 100000,
+          date: '2026-11-12');
+      expect(
+          () => core.updateTransaction(id,
+              walletId: bank,
+              toWalletId: bank,
+              amountMinor: 100000,
+              date: '2026-11-12'),
+          throwsFinance('same_wallet'));
+      expect(
+          () => core.updateTransaction(id,
+              walletId: bank,
+              toWalletId: savings,
+              amountMinor: 100000,
+              date: '2026-11-12'),
+          throwsFinance('transfer_into_savings'));
+      expect(core.walletBalance(cash), 100000);
+    });
+
+    test('chặn số tiền 0, âm và quá lớn; dữ liệu giữ nguyên', () {
+      final id = core.addExpense(
+          requestId: nextRequest(),
+          walletId: cash,
+          amountMinor: 50000,
+          date: '2026-11-12');
+      for (final bad in [0, -5, maxAmountMinor + 1]) {
+        expect(
+            () => core.updateTransaction(id,
+                walletId: cash, amountMinor: bad, date: '2026-11-12'),
+            throwsA(isA<FinanceException>()));
+      }
+      expect(core.walletBalance(cash), -50000);
+    });
+
+    test('chặn chi từ ví tiết kiệm và sửa giao dịch đã xóa', () {
+      final id = core.addExpense(
+          requestId: nextRequest(),
+          walletId: cash,
+          amountMinor: 50000,
+          date: '2026-11-12');
+      expect(
+          () => core.updateTransaction(id,
+              walletId: savings, amountMinor: 50000, date: '2026-11-12'),
+          throwsFinance('expense_from_savings'));
+      core.deleteTransaction(id);
+      expect(
+          () => core.updateTransaction(id,
+              walletId: cash, amountMinor: 1, date: '2026-11-12'),
+          throwsFinance('transaction_deleted'));
+    });
+
+    test('từ chối số tiền vượt giới hạn khi tạo mới', () {
+      expect(
+          () => core.addIncome(
+              requestId: nextRequest(),
+              walletId: cash,
+              amountMinor: maxAmountMinor + 1,
+              date: '2026-11-12'),
+          throwsFinance('amount_too_large'));
+      core.addIncome(
+          requestId: nextRequest(),
+          walletId: cash,
+          amountMinor: maxAmountMinor,
+          date: '2026-11-12');
+      expect(core.walletBalance(cash), maxAmountMinor);
+    });
+  });
 }

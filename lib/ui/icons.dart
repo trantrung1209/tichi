@@ -5,6 +5,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../app/theme.dart';
+import '../core/l10n.dart';
 
 const Map<String, IconData> tichiIcons = {
   'food': Icons.restaurant,
@@ -14,6 +15,8 @@ const Map<String, IconData> tichiIcons = {
   'fuel': Icons.local_gas_station,
   'shopping': Icons.shopping_bag,
   'home': Icons.home,
+  'info': Icons.info_outline,
+  'guide': Icons.menu_book_outlined,
   'bills': Icons.receipt_long,
   'electricity': Icons.bolt,
   'water': Icons.water_drop,
@@ -151,7 +154,7 @@ class IconColorPicker extends StatelessWidget {
               Semantics(
                 button: true,
                 selected: key == iconKey,
-                label: 'Biểu tượng $key',
+                label: tr('Biểu tượng $key', 'Icon $key'),
                 child: InkResponse(
                   onTap: () => onIcon(key),
                   radius: 26,
@@ -188,7 +191,7 @@ class IconColorPicker extends StatelessWidget {
                 Semantics(
                   button: true,
                   selected: entry.key == colorKey,
-                  label: 'Màu ${entry.key}',
+                  label: tr('Màu ${entry.key}', 'Color ${entry.key}'),
                   child: InkResponse(
                     onTap: () => onColor!(entry.key),
                     radius: 24,

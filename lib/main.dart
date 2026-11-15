@@ -12,6 +12,9 @@ import 'app/seed.dart';
 import 'app/store.dart';
 import 'app/theme.dart';
 import 'core/finance/finance_core.dart';
+import 'core/l10n.dart';
+import 'ui/add_transaction_screen.dart';
+import 'ui/name_screen.dart';
 import 'ui/onboarding_screen.dart';
 import 'ui/savings_move_screen.dart';
 import 'ui/shell.dart';
@@ -51,12 +54,18 @@ class _TichiBootState extends State<TichiBoot> {
     final directory = await getApplicationSupportDirectory();
     final core = FinanceCore(sqlite3.open('${directory.path}/tichi.db'))
       ..migrate();
-    seedIfEmpty(core);
+    // Lần đầu cài: tên ví, danh mục và loại tiền theo ngôn ngữ, vùng của máy.
+    final locale = WidgetsBinding.instance.platformDispatcher.locale;
+    final vietnamese = locale.languageCode == 'vi';
+    seedIfEmpty(core,
+        english: !vietnamese,
+        currency: vietnamese || locale.countryCode == 'VN' ? 'VND' : 'USD');
     final store = AppStore(core, reminders: _reminders);
-    var fromReminder = false;
+    L10n.en = store.resolveEnglish(locale);
+    String? launchPayload;
     try {
-      await _reminders.init(onTap: _openSaving);
-      fromReminder = await _reminders.launchedFromReminder();
+      await _reminders.init(onTap: _openFromNotification);
+      launchPayload = await _reminders.launchPayload();
     } catch (_) {
       // Không có thông báo thì app vẫn chạy bình thường.
     }
@@ -66,18 +75,28 @@ class _TichiBootState extends State<TichiBoot> {
     if (!mounted) return;
     setState(() => _store = store);
     unawaited(store.syncReminder());
-    if (fromReminder) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _openSaving());
+    if (launchPayload != null) {
+      final payload = launchPayload;
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _openFromNotification(payload));
     }
   }
 
-  /// Bấm vào thông báo nhắc: mở thẳng màn hình Tiết kiệm ngay.
-  void _openSaving() {
+  /// Bấm vào thông báo: nhắc tiết kiệm mở màn Tiết kiệm ngay, nhắc ghi chi
+  /// tiêu mở màn Thêm giao dịch.
+  void _openFromNotification(String payload) {
     final store = _store;
     if (store == null || !store.onboardingDone) return;
-    _navigatorKey.currentState?.push(MaterialPageRoute<void>(
-        builder: (_) =>
-            const SavingsMoveScreen(mode: SavingsMode.contribute)));
+    final Widget screen;
+    if (payload == savingsReminderPayload) {
+      screen = const SavingsMoveScreen(mode: SavingsMode.contribute);
+    } else if (payload == expenseReminderPayload) {
+      screen = const AddTransactionScreen();
+    } else {
+      return;
+    }
+    _navigatorKey.currentState
+        ?.push(MaterialPageRoute<void>(builder: (_) => screen));
   }
 
   @override
@@ -118,6 +137,7 @@ class TichiApp extends StatefulWidget {
 /// lại toàn bộ màn hình khi giao diện đổi.
 class _TichiAppState extends State<TichiApp> with WidgetsBindingObserver {
   late Brightness _brightness;
+  late bool _english;
 
   @override
   void initState() {
@@ -126,6 +146,8 @@ class _TichiAppState extends State<TichiApp> with WidgetsBindingObserver {
     widget.store.addListener(_update);
     _brightness = _resolve();
     TichiColors.dark = _brightness == Brightness.dark;
+    _english = _resolveEnglish();
+    L10n.en = _english;
   }
 
   @override
@@ -138,6 +160,12 @@ class _TichiAppState extends State<TichiApp> with WidgetsBindingObserver {
   @override
   void didChangePlatformBrightness() => _update();
 
+  @override
+  void didChangeLocales(List<Locale>? locales) => _update();
+
+  bool _resolveEnglish() => widget.store.resolveEnglish(
+      WidgetsBinding.instance.platformDispatcher.locale);
+
   Brightness _resolve() => switch (widget.store.themeMode) {
         'light' => Brightness.light,
         'dark' => Brightness.dark,
@@ -146,9 +174,12 @@ class _TichiAppState extends State<TichiApp> with WidgetsBindingObserver {
 
   void _update() {
     final next = _resolve();
-    if (next == _brightness || !mounted) return;
+    final english = _resolveEnglish();
+    if ((next == _brightness && english == _english) || !mounted) return;
     setState(() {
       _brightness = next;
+      _english = english;
+      L10n.en = english;
       TichiColors.dark = next == Brightness.dark;
     });
     // Màu của các màn hình đọc từ TichiColors, không qua Theme, nên phải bảo
@@ -184,7 +215,7 @@ class _TichiAppState extends State<TichiApp> with WidgetsBindingObserver {
           theme: buildTheme(Brightness.light),
           darkTheme: buildTheme(Brightness.dark),
           themeMode: dark ? ThemeMode.dark : ThemeMode.light,
-          locale: const Locale('vi'),
+          locale: Locale(_english ? 'en' : 'vi'),
           supportedLocales: const [Locale('vi'), Locale('en')],
           localizationsDelegates: const [
             GlobalMaterialLocalizations.delegate,
@@ -204,12 +235,29 @@ class _StartGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final done = StoreScope.of(context).onboardingDone;
+    final store = StoreScope.of(context);
+    // Thứ tự: hỏi tên gọi (cả người dùng cũ chưa có tên) → hướng dẫn lần đầu
+    // → Trang chủ. Mỗi bước chỉ qua khi người dùng xác nhận.
+    final Widget child;
+    if (store.userName == null) {
+      child = const NameScreen(key: ValueKey('name'));
+    } else if (!store.onboardingDone) {
+      child = const OnboardingScreen(key: ValueKey('onboarding'));
+    } else {
+      child = const HomeShell(key: ValueKey('home'));
+    }
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 350),
-      child: done
-          ? const HomeShell(key: ValueKey('home'))
-          : const OnboardingScreen(key: ValueKey('onboarding')),
+      duration: const Duration(milliseconds: 400),
+      switchInCurve: Curves.easeOutCubic,
+      transitionBuilder: (child, animation) => FadeTransition(
+        opacity: animation,
+        child: SlideTransition(
+          position: Tween(begin: const Offset(0, 0.03), end: Offset.zero)
+              .animate(animation),
+          child: child,
+        ),
+      ),
+      child: child,
     );
   }
 }

@@ -8,6 +8,7 @@ import '../app/theme.dart';
 import '../core/finance/finance_core.dart';
 import 'icons.dart';
 import 'widgets.dart';
+import '../core/l10n.dart';
 
 class CategoriesScreen extends StatefulWidget {
   const CategoriesScreen({super.key});
@@ -40,11 +41,11 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Danh mục',
+        title: Text(tr('Danh mục', 'Category'),
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
         actions: [
           IconButton(
-            tooltip: 'Thêm danh mục',
+            tooltip: tr('Thêm danh mục', 'Add category'),
             icon: const Icon(Icons.add),
             onPressed: () => open(CategoryFormScreen(type: _type)),
           ),
@@ -56,9 +57,9 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
           children: [
             SegmentedButton<String>(
               showSelectedIcon: false,
-              segments: const [
-                ButtonSegment(value: 'EXPENSE', label: Text('Chi')),
-                ButtonSegment(value: 'INCOME', label: Text('Thu')),
+              segments: [
+                ButtonSegment(value: 'EXPENSE', label: Text(tr('Chi', 'Expense'))),
+                ButtonSegment(value: 'INCOME', label: Text(tr('Thu', 'Income'))),
               ],
               selected: {_type},
               onSelectionChanged: (s) => setState(() => _type = s.first),
@@ -67,7 +68,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
             GroupCard(children: [for (final c in visible) tile(c)]),
             if (hidden.isNotEmpty) ...[
               const SizedBox(height: 16),
-              const FieldLabel('Đã ẩn'),
+              FieldLabel(tr('Đã ẩn', 'Hidden')),
               GroupCard(children: [for (final c in hidden) tile(c)]),
             ],
           ],
@@ -144,14 +145,14 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
-          tooltip: 'Đóng',
+          tooltip: tr('Đóng', 'Close'),
           icon: const Icon(Icons.close),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
             _isEdit
-                ? 'Sửa danh mục'
-                : (widget.type == 'EXPENSE' ? 'Danh mục chi mới' : 'Danh mục thu mới'),
+                ? tr('Sửa danh mục', 'Edit category')
+                : (widget.type == 'EXPENSE' ? tr('Danh mục chi mới', 'New expense category') : tr('Danh mục thu mới', 'New income category')),
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
       ),
       body: SafeArea(
@@ -164,11 +165,11 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
               key: const Key('category-name'),
               controller: _name,
               textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(labelText: 'Tên danh mục'),
+              decoration: InputDecoration(labelText: tr('Tên danh mục', 'Category name')),
               onChanged: (_) => setState(() => _error = null),
             ),
             const SizedBox(height: 16),
-            const FieldLabel('Biểu tượng và màu'),
+            FieldLabel(tr('Biểu tượng và màu', 'Icon & color')),
             IconColorPicker(
               icons: categoryIconChoices,
               iconKey: _icon,
@@ -178,18 +179,18 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
             ),
             if (_error != null) FormError(_error!),
             const SizedBox(height: 20),
-            FilledButton(onPressed: _save, child: Text(_isEdit ? 'Lưu' : 'Tạo danh mục')),
+            FilledButton(onPressed: _save, child: Text(_isEdit ? tr('Lưu', 'Save') : tr('Tạo danh mục', 'Create category'))),
             if (_isEdit) ...[
               const SizedBox(height: 8),
               TextButton(
                 onPressed: _toggleArchive,
                 style: TextButton.styleFrom(
                     minimumSize: const Size.fromHeight(48)),
-                child: Text(_archived ? 'Hiện lại danh mục' : 'Ẩn danh mục này'),
+                child: Text(_archived ? tr('Hiện lại danh mục', 'Show category again') : tr('Ẩn danh mục này', 'Hide this category')),
               ),
               Text(
-                'Ẩn danh mục thì không chọn được khi ghi giao dịch mới. Giao '
-                'dịch cũ vẫn giữ tên và biểu tượng.',
+                tr('Ẩn danh mục thì không chọn được khi ghi giao dịch mới. Giao '
+                'dịch cũ vẫn giữ tên và biểu tượng.', 'Hidden categories can\'t be picked for new transactions. Old ' 'transactions keep their name and icon.'),
                 textAlign: TextAlign.center,
                 style: TichiText.label,
               ),

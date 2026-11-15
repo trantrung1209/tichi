@@ -8,9 +8,11 @@ import '../app/store.dart';
 import '../app/theme.dart';
 import '../core/finance/finance_core.dart';
 import '../core/finance/money.dart';
+import 'backup_screen.dart';
 import 'brand.dart';
 import 'icons.dart';
 import 'widgets.dart';
+import '../core/l10n.dart';
 
 class OnboardingScreen extends StatefulWidget {
   /// [replay] true khi người dùng mở lại từ mục Thêm: bỏ trang nhập số dư.
@@ -27,6 +29,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final Map<String, TextEditingController> _balances = {};
   int _page = 0;
   bool _remind = true;
+  bool _remindExpense = true;
   String? _error;
 
   int get _pageCount => widget.replay ? 3 : 4;
@@ -49,6 +52,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
   }
 
+  /// Đổi máy hoặc cài lại app: khôi phục bản sao lưu rồi vào thẳng Trang chủ.
+  Future<void> _restore() async {
+    final store = StoreScope.read(context);
+    final restored = await restoreFromBackupFile(context);
+    if (restored) store.completeOnboarding();
+  }
+
   Future<void> _finish() async {
     final store = StoreScope.read(context);
     if (widget.replay) {
@@ -61,7 +71,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         if (text.isEmpty) continue;
         final amount = parseMinor(text, wallet.currencyCode);
         if (amount == null) {
-          setState(() => _error = 'Số dư của ${wallet.name} không hợp lệ.');
+          setState(() => _error = tr('Số dư của ${wallet.name} không hợp lệ.', 'The balance of ${wallet.name} is not valid.'));
           return;
         }
         store.setOpeningBalance(wallet.id, amount);
@@ -71,6 +81,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       return;
     }
     if (_remind) await store.setReminder(enabled: true);
+    if (_remindExpense) await store.setExpenseReminder(enabled: true);
     store.completeOnboarding();
   }
 
@@ -79,40 +90,40 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final store = StoreScope.of(context);
     final isLast = _page == _pageCount - 1;
     final pages = <Widget>[
-      const _IntroPage(
+      _IntroPage(
         hero: TichiAppIcon(size: 96),
-        title: 'Chào mừng đến Tichi',
-        lead: 'Tích từng chút, thành điều lớn.',
+        title: tr('Chào mừng đến Tichi', 'Welcome to Tichi'),
+        lead: tr('Tích từng chút, thành điều lớn.', 'Little by little, it adds up.'),
         points: [
-          ('wallet', 'Không cần tài khoản', 'Mở app là dùng được ngay.'),
-          ('internet', 'Không cần Internet', 'Mọi tính năng chạy ngay trên máy.'),
-          ('insurance', 'Dữ liệu là của bạn',
-              'Chỉ nằm trên điện thoại này. Không quảng cáo, không theo dõi.'),
+          ('wallet', tr('Không cần tài khoản', 'No account needed'), tr('Mở app là dùng được ngay.', 'Open the app and start right away.')),
+          ('internet', tr('Không cần Internet', 'No Internet needed'), tr('Mọi tính năng chạy ngay trên máy.', 'Everything runs on your phone.')),
+          ('insurance', tr('Dữ liệu là của bạn', 'Your data is yours'),
+              tr('Chỉ nằm trên điện thoại này. Không quảng cáo, không theo dõi.', 'It stays on this phone. No ads, no tracking.')),
         ],
       ),
-      const _IntroPage(
+      _IntroPage(
         hero: IconAvatar(icon: 'bills', color: 'blue', size: 96),
-        title: 'Ghi thu chi trong vài giây',
-        lead: 'Bấm nút + ở Trang chủ, nhập số tiền, chọn danh mục và ví.',
+        title: tr('Ghi thu chi trong vài giây', 'Log income and expenses in seconds'),
+        lead: tr('Bấm nút + ở Trang chủ, nhập số tiền, chọn danh mục và ví.', 'Tap + on Home, enter the amount, pick a category and a wallet.'),
         points: [
-          ('transfer', 'Chuyển giữa các ví',
-              'Rút tiền ATM hay nạp ví điện tử là chuyển ví, không tính là chi.'),
-          ('more', 'Vuốt sang trái để xóa', 'Lỡ tay thì bấm Hoàn tác.'),
-          ('budget', 'Đặt ngân sách tháng',
-              'Tichi báo khi bạn đã dùng 80% và khi vượt mức.'),
+          ('transfer', tr('Chuyển giữa các ví', 'Move money between wallets'),
+              tr('Rút tiền ATM hay nạp ví điện tử là chuyển ví, không tính là chi.', 'ATM withdrawals or e-wallet top-ups are transfers, not expenses.')),
+          ('more', tr('Vuốt sang trái để xóa', 'Swipe left to delete'), tr('Lỡ tay thì bấm Hoàn tác.', 'Made a mistake? Tap Undo.')),
+          ('budget', tr('Đặt ngân sách tháng', 'Set monthly budget'),
+              tr('Tichi báo khi bạn đã dùng 80% và khi vượt mức.', 'Tichi lets you know at 80% and when you go over.')),
         ],
       ),
-      const _IntroPage(
+      _IntroPage(
         hero: IconAvatar(icon: 'savings', color: 'gold', size: 96),
-        title: 'Tiết kiệm bằng tiền thật',
-        lead: 'Mỗi lần tiết kiệm là chuyển tiền thật vào ví tiết kiệm, '
-            'không phải con số ảo.',
+        title: tr('Tiết kiệm bằng tiền thật', 'Save with real money'),
+        lead: tr('Mỗi lần tiết kiệm là chuyển tiền thật vào ví tiết kiệm, '
+            'không phải con số ảo.', 'Every saving is a real transfer into your savings wallet, ' 'not just a number.'),
         points: [
-          ('travel', 'Đặt mục tiêu', 'Du lịch, điện thoại mới, quỹ dự phòng...'),
-          ('coins', 'Biết mỗi ngày cần bao nhiêu',
-              'Tichi tính số nên dành mỗi ngày để kịp hạn.'),
-          ('bonus', 'Giữ chuỗi ngày',
-              'Bỏ một hôm cũng không sao, cứ tiếp tục là được.'),
+          ('travel', tr('Đặt mục tiêu', 'Set goals'), tr('Du lịch, điện thoại mới, quỹ dự phòng...', 'A trip, a new phone, an emergency fund...')),
+          ('coins', tr('Biết mỗi ngày cần bao nhiêu', 'Know how much each day'),
+              tr('Tichi tính số nên dành mỗi ngày để kịp hạn.', 'Tichi works out how much to set aside daily to reach your goal.')),
+          ('bonus', tr('Giữ chuỗi ngày', 'Keep your streak'),
+              tr('Bỏ một hôm cũng không sao, cứ tiếp tục là được.', 'Missed a day? No problem, just keep going.')),
         ],
       ),
       if (!widget.replay)
@@ -121,6 +132,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           controllers: _balances,
           remind: _remind,
           onRemind: (value) => setState(() => _remind = value),
+          remindExpense: _remindExpense,
+          onRemindExpense: (value) => setState(() => _remindExpense = value),
+          currency: store.baseCurrency,
+          onCurrency: (currency) {
+            // Số đã gõ theo loại tiền cũ không còn đúng nữa.
+            for (final controller in _balances.values) {
+              controller.clear();
+            }
+            store.useCurrency(currency);
+          },
           error: _error,
         ),
     ];
@@ -139,7 +160,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       : () => _pages.animateToPage(_pageCount - 1,
                           duration: const Duration(milliseconds: 320),
                           curve: Curves.easeOut),
-                  child: Text(isLast ? '' : 'Bỏ qua'),
+                  child: Text(isLast ? '' : tr('Bỏ qua', 'Skip')),
                 ),
               ),
             ),
@@ -168,15 +189,26 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ],
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+              padding: EdgeInsets.fromLTRB(
+                  20, 20, 20, !widget.replay && _page == 0 ? 4 : 16),
               child: FilledButton(
                 key: const Key('onboarding-next'),
                 onPressed: _next,
                 child: Text(isLast
-                    ? (widget.replay ? 'Đã hiểu' : 'Bắt đầu dùng Tichi')
-                    : 'Tiếp'),
+                    ? (widget.replay ? tr('Đã hiểu', 'Got it') : tr('Bắt đầu dùng Tichi', 'Start using Tichi'))
+                    : tr('Tiếp', 'Next')),
               ),
             ),
+            if (!widget.replay && _page == 0)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: TextButton.icon(
+                  key: const Key('onboarding-restore'),
+                  onPressed: _restore,
+                  icon: const Icon(Icons.restore, size: 20),
+                  label: Text(tr('Đã có bản sao lưu? Khôi phục', 'Have a backup? Restore')),
+                ),
+              ),
           ],
         ),
       ),
@@ -257,6 +289,10 @@ class _BalancePage extends StatelessWidget {
     required this.controllers,
     required this.remind,
     required this.onRemind,
+    required this.remindExpense,
+    required this.onRemindExpense,
+    required this.currency,
+    required this.onCurrency,
     required this.error,
   });
 
@@ -264,6 +300,10 @@ class _BalancePage extends StatelessWidget {
   final Map<String, TextEditingController> controllers;
   final bool remind;
   final ValueChanged<bool> onRemind;
+  final bool remindExpense;
+  final ValueChanged<bool> onRemindExpense;
+  final String currency;
+  final ValueChanged<String> onCurrency;
   final String? error;
 
   @override
@@ -274,18 +314,35 @@ class _BalancePage extends StatelessWidget {
         const Center(
             child: IconAvatar(icon: 'cash', color: 'green', size: 96)),
         const SizedBox(height: 28),
-        const Text('Bạn đang có bao nhiêu?',
+        Text(tr('Bạn đang có bao nhiêu?', 'How much do you have now?'),
             textAlign: TextAlign.center,
             style: TextStyle(
                 fontSize: 26, fontWeight: FontWeight.w700, letterSpacing: -0.4)),
         const SizedBox(height: 10),
         Text(
-            'Nhập số dư hiện có để Tichi bắt đầu đúng. Có thể bỏ trống và sửa '
-            'sau trong Thêm → Ví.',
+            tr('Nhập số dư hiện có để Tichi bắt đầu đúng. Có thể bỏ trống và sửa '
+            'sau trong Thêm → Ví.', 'Enter your current balances so Tichi starts out right. You can leave ' 'them empty and edit later in More › Wallets.'),
             textAlign: TextAlign.center,
             style:
                 TextStyle(fontSize: 15, height: 1.5, color: TichiColors.muted)),
-        const SizedBox(height: 24),
+        const SizedBox(height: 20),
+        Text(tr('Bạn chủ yếu dùng loại tiền nào?', 'Which currency do you mostly use?'),
+            style: TichiText.section),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: SegmentedButton<String>(
+            key: const Key('onboarding-currency'),
+            showSelectedIcon: false,
+            segments: const [
+              ButtonSegment(value: 'VND', label: Text('VND (₫)')),
+              ButtonSegment(value: 'USD', label: Text('USD (\$)')),
+            ],
+            selected: {currency},
+            onSelectionChanged: (s) => onCurrency(s.first),
+          ),
+        ),
+        const SizedBox(height: 20),
         for (final wallet in wallets)
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
@@ -312,8 +369,21 @@ class _BalancePage extends StatelessWidget {
           child: SwitchListTile(
             value: remind,
             onChanged: onRemind,
-            title: const Text('Nhắc tôi tiết kiệm mỗi ngày'),
-            subtitle: const Text('Lúc 20:00, đổi giờ được trong Thêm'),
+            title: Text(tr('Nhắc tôi tiết kiệm', 'Remind me to save')),
+            subtitle: Text(tr('Mỗi ngày lúc 20:00. Đổi sang mỗi tuần, mỗi tháng trong Thêm',
+                'Daily at 8:00 PM. Switch to weekly or monthly in More')),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Card(
+          child: SwitchListTile(
+            key: const Key('onboarding-expense-reminder'),
+            value: remindExpense,
+            onChanged: onRemindExpense,
+            title: Text(tr('Nhắc khi cả ngày chưa ghi chi tiêu',
+                'Remind me if I log nothing all day')),
+            subtitle: Text(tr('Lúc 21:00, chỉ khi hôm đó chưa ghi khoản nào',
+                'At 9:00 PM, only on days with nothing logged')),
           ),
         ),
         if (error != null) FormError(error!),

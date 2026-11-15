@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../app/theme.dart';
 import 'brand.dart';
+import '../core/l10n.dart';
 
 class SplashView extends StatefulWidget {
   const SplashView({super.key});
@@ -66,7 +67,7 @@ class _SplashViewState extends State<SplashView>
                             color: Colors.white,
                             decoration: TextDecoration.none)),
                     SizedBox(height: 6),
-                    Text('Tích từng chút, thành điều lớn.',
+                    Text(tr('Tích từng chút, thành điều lớn.', 'Little by little, it adds up.'),
                         style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w400,

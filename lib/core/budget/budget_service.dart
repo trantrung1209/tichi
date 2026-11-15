@@ -11,6 +11,8 @@ import 'dart:math';
 
 import 'package:sqlite3/sqlite3.dart';
 
+import '../l10n.dart';
+
 import '../finance/finance_core.dart';
 
 class BudgetStatus {
@@ -136,7 +138,7 @@ class BudgetService {
         BudgetStatus(
           id: row['id'] as String,
           categoryId: row['category_id'] as String?,
-          name: (row['category_name'] as String?) ?? 'Cả tháng',
+          name: (row['category_name'] as String?) ?? tr('Cả tháng', 'Whole month'),
           icon: (row['category_icon'] as String?) ?? 'budget',
           color: (row['category_color'] as String?) ?? 'emerald',
           currencyCode: row['currency_code'] as String,
