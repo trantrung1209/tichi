@@ -114,10 +114,20 @@ ThemeData _build(Brightness brightness) {
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         minimumSize: const Size.fromHeight(54),
-        shape: shape,
+        // Nút bo tròn hai đầu (viên thuốc) theo đặc tả Tichi 2.0.
+        shape: const StadiumBorder(),
         textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
       ),
     ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size(48, 48),
+        shape: const StadiumBorder(),
+        side: BorderSide(color: TichiColors.primary, width: 1.5),
+        textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+      ),
+    ),
+    chipTheme: const ChipThemeData(shape: StadiumBorder()),
     floatingActionButtonTheme: FloatingActionButtonThemeData(
       backgroundColor: TichiColors.brand,
       foregroundColor: Colors.white,

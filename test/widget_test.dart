@@ -55,13 +55,21 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// Gõ số tiền bằng bàn phím máy tính, từng phím một.
+  Future<void> typeAmount(WidgetTester tester, String amount) async {
+    for (final ch in amount.split('')) {
+      await tester.tap(find.byKey(Key('key-$ch')));
+      await tester.pump();
+    }
+  }
+
   Future<void> addTransaction(WidgetTester tester,
       {required String type, required String amount}) async {
     await tester.tap(find.byTooltip('Thêm giao dịch'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(Key('type-$type')));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const Key('amount-field')), amount);
+    await typeAmount(tester, amount);
     await tester.tap(find.byKey(const Key('save-button')));
     await tester.pumpAndSettle();
   }
@@ -236,7 +244,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Sửa giao dịch'), findsOneWidget);
     expect(find.text('500.000'), findsOneWidget);
-    await tester.enterText(find.byKey(const Key('amount-field')), '750000');
+    await tester.tap(find.byKey(const Key('key-clear')));
+    await typeAmount(tester, '750000');
     await tester.tap(find.byKey(const Key('save-button')));
     await tester.pumpAndSettle();
     expect(core.activeTransactionCount(), 1);
@@ -301,9 +310,43 @@ void main() {
     await openApp(tester);
     await tester.tap(find.byTooltip('Thêm giao dịch'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const Key('amount-field')), '1000000');
-    await tester.pump();
+    await typeAmount(tester, '1000000');
     expect(find.text('1.000.000'), findsOneWidget);
+  });
+
+  testWidgets('bàn phím máy tính: tính 120.000 − 40.000 rồi lưu, có Hoàn tác',
+      (tester) async {
+    await openApp(tester);
+    await tester.tap(find.byTooltip('Thêm giao dịch'));
+    await tester.pumpAndSettle();
+    await typeAmount(tester, '120000');
+    await tester.tap(find.byKey(const Key('key-minus')));
+    await tester.pump();
+    await typeAmount(tester, '40000');
+    expect(find.text('120.000 − 40.000'), findsOneWidget);
+    expect(find.text('80.000'), findsOneWidget);
+    expect(find.text('='), findsOneWidget);
+    // Bấm = gộp thành kết quả, bấm lần nữa là Lưu.
+    await tester.tap(find.byKey(const Key('save-button')));
+    await tester.pump();
+    expect(find.text('='), findsNothing);
+    await tester.tap(find.byKey(const Key('save-button')));
+    await tester.pumpAndSettle();
+    expect(core.activeTransactionCount(), 1);
+    expect(find.byKey(const Key('saved-snackbar')), findsOneWidget);
+    await tester.tap(find.text('Hoàn tác'));
+    await tester.pumpAndSettle();
+    expect(core.activeTransactionCount(), 0);
+  });
+
+  testWidgets('chip gợi ý: gõ 35 rồi chạm 35.000 ₫', (tester) async {
+    await openApp(tester);
+    await tester.tap(find.byTooltip('Thêm giao dịch'));
+    await tester.pumpAndSettle();
+    await typeAmount(tester, '35');
+    await tester.tap(find.byKey(const Key('suggest-35000')));
+    await tester.pump();
+    expect(find.text('35.000'), findsOneWidget);
   });
 
   testWidgets('đổi sang giao diện tối rồi về sáng', (tester) async {

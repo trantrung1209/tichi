@@ -9,7 +9,7 @@ class TichiStrings {
 
   // ----------------------------------------------------- Thông tin app
   static const appName = 'Tichi';
-  static const appVersion = '1.2.0';
+  static const appVersion = '1.3.0';
   static const author = 'Trung Nguyen';
 
   // ----------------------------------------------------------- Tên gọi

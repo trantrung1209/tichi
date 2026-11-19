@@ -12,6 +12,7 @@ class FakeReminders implements Reminders {
   int? savingsWeekday;
   int? savingsMonthDay;
   String? savingsTitle;
+  bool? savingsSkip;
   bool? expenseSkipToday;
   bool expenseCancelled = false;
 
@@ -25,9 +26,11 @@ class FakeReminders implements Reminders {
     required int minute,
     int weekday = 7,
     int monthDay = 1,
+    bool skipCurrentPeriod = false,
     required String title,
     required String body,
   }) async {
+    savingsSkip = skipCurrentPeriod;
     savingsRepeat = repeat;
     savingsWeekday = weekday;
     savingsMonthDay = monthDay;
@@ -122,6 +125,48 @@ void main() {
               monthDay: 5),
           DateTime(2027, 1, 5, 20, 0));
     });
+
+    test('đã tiết kiệm kỳ này thì nhắc từ kỳ sau', () {
+      // Hằng ngày: bỏ hôm nay.
+      expect(
+          nextReminderTime(
+              now: now,
+              repeat: ReminderRepeat.daily,
+              hour: 20,
+              minute: 0,
+              skipCurrentPeriod: true),
+          DateTime(2026, 11, 16, 20, 0));
+      // Thứ Tư 11/11, nhắc Chủ nhật: tuần này đã góp thì sang Chủ nhật 22/11.
+      expect(
+          nextReminderTime(
+              now: DateTime(2026, 11, 11, 10),
+              repeat: ReminderRepeat.weekly,
+              hour: 20,
+              minute: 0,
+              weekday: 7,
+              skipCurrentPeriod: true),
+          DateTime(2026, 11, 22, 20, 0));
+      // Lần nhắc kế đã thuộc tuần sau thì giữ nguyên.
+      expect(
+          nextReminderTime(
+              now: DateTime(2026, 11, 11, 10),
+              repeat: ReminderRepeat.weekly,
+              hour: 20,
+              minute: 0,
+              weekday: 1,
+              skipCurrentPeriod: true),
+          DateTime(2026, 11, 16, 20, 0));
+      // Hằng tháng, ngày 28: tháng này đã góp thì sang 28/12.
+      expect(
+          nextReminderTime(
+              now: now,
+              repeat: ReminderRepeat.monthly,
+              hour: 20,
+              minute: 0,
+              monthDay: 28,
+              skipCurrentPeriod: true),
+          DateTime(2026, 12, 28, 20, 0));
+    });
   });
 
   group('Nhắc tiết kiệm theo tuần, tháng', () {
@@ -204,6 +249,67 @@ void main() {
       await store.setExpenseReminder(enabled: false);
       await store.syncReminder();
       expect(reminders.expenseCancelled, isTrue);
+    });
+
+    test('chỉ khoản chi mới tính, khoản thu không làm mất nhắc', () async {
+      final reminders = FakeReminders();
+      final core = FinanceCore.inMemory();
+      seedIfEmpty(core);
+      final store = AppStore(core, reminders: reminders);
+      await store.setExpenseReminder(enabled: true);
+      expect(store.expenseReminderTime, (20, 0));
+      store.addIncome(
+          requestId: 'salary',
+          walletId: store.spendingWallets().first.id,
+          amountMinor: 1000000,
+          date: today());
+      await store.syncReminder();
+      expect(reminders.expenseSkipToday, isFalse);
+    });
+
+    test('giờ mặc định cũ 21:00 được chuyển sang 20:00 một lần', () {
+      final core = FinanceCore.inMemory();
+      seedIfEmpty(core);
+      core.setSetting('expense_reminder_time', '21:00');
+      final store = AppStore(core);
+      expect(store.expenseReminderTime, (20, 0));
+      // Người dùng chọn lại 21:00 sau đó thì giữ nguyên.
+      core.setSetting('expense_reminder_time', '21:00');
+      expect(AppStore(core).expenseReminderTime, (21, 0));
+    });
+  });
+
+  group('Nhắc tiết kiệm chỉ khi kỳ này chưa góp', () {
+    test('góp hôm nay thì nhắc hằng ngày dời sang mai', () async {
+      final reminders = FakeReminders();
+      final core = FinanceCore.inMemory();
+      seedIfEmpty(core);
+      final store = AppStore(core, reminders: reminders);
+      await store.setReminder(enabled: true, frequency: 'daily');
+      await store.syncReminder();
+      expect(reminders.savingsSkip, isFalse);
+
+      // Tiền chỉ vào ví tiết kiệm qua chức năng Tiết kiệm: tạo mục tiêu rồi góp.
+      final vault = core.wallets().firstWhere((w) => w.isSavings).id;
+      final cash = store.spendingWallets().first.id;
+      core.addIncome(
+          requestId: 'salary', walletId: cash, amountMinor: 100000, date: today());
+      final goal = store.savings.createGoal(
+          name: 'Du lịch',
+          targetMinor: 1000000,
+          savingsWalletId: vault,
+          startDate: today(),
+          targetDate: '2030-12-31');
+      store.savings.contribute(
+          requestId: 'save',
+          goalId: goal,
+          fromWalletId: cash,
+          amountMinor: 50000,
+          date: today());
+      await store.syncReminder();
+      expect(reminders.savingsSkip, isTrue);
+      expect(store.hasSavedInPeriod(DateTime.now(), 'weekly'), isTrue);
+      expect(store.hasSavedInPeriod(DateTime.now(), 'monthly'), isTrue);
     });
   });
 

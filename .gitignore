@@ -68,3 +68,7 @@ Bảng thương hiệu*.png
 *Savora.png
 *.zip
 Photos-*/
+
+# File tạm khi làm việc
+*.mp4
+test_log.txt

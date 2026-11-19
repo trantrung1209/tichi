@@ -19,6 +19,10 @@ const String savingsReminderPayload = 'savings_reminder';
 const String expenseReminderPayload = 'expense_reminder';
 
 /// Lần nhắc kế tiếp theo giờ trên máy, sau thời điểm [now].
+///
+/// [skipToday] (hằng ngày) hoặc [skipCurrentPeriod] (mọi mức): kỳ hiện tại đã
+/// làm rồi nên không nhắc trong kỳ này. Kỳ = ngày, tuần (thứ Hai tới Chủ
+/// nhật) hoặc tháng chứa [now].
 DateTime nextReminderTime({
   required DateTime now,
   required ReminderRepeat repeat,
@@ -27,11 +31,12 @@ DateTime nextReminderTime({
   int weekday = 7,
   int monthDay = 1,
   bool skipToday = false,
+  bool skipCurrentPeriod = false,
 }) {
   switch (repeat) {
     case ReminderRepeat.daily:
       var next = DateTime(now.year, now.month, now.day, hour, minute);
-      if (skipToday || !next.isAfter(now)) {
+      if (skipToday || skipCurrentPeriod || !next.isAfter(now)) {
         next = DateTime(now.year, now.month, now.day + 1, hour, minute);
       }
       return next;
@@ -41,10 +46,16 @@ DateTime nextReminderTime({
       if (!next.isAfter(now)) {
         next = DateTime(next.year, next.month, next.day + 7, hour, minute);
       }
+      if (skipCurrentPeriod) {
+        final weekEnd = DateTime(now.year, now.month, now.day + 8 - now.weekday);
+        if (next.isBefore(weekEnd)) {
+          next = DateTime(next.year, next.month, next.day + 7, hour, minute);
+        }
+      }
       return next;
     case ReminderRepeat.monthly:
       var next = DateTime(now.year, now.month, monthDay, hour, minute);
-      if (!next.isAfter(now)) {
+      if (!next.isAfter(now) || skipCurrentPeriod) {
         next = DateTime(now.year, now.month + 1, monthDay, hour, minute);
       }
       return next;
@@ -108,6 +119,7 @@ class LocalReminders implements Reminders {
     required int minute,
     int weekday = 7,
     int monthDay = 1,
+    bool skipCurrentPeriod = false,
     required String title,
     required String body,
   }) async {
@@ -118,7 +130,8 @@ class LocalReminders implements Reminders {
         hour: hour,
         minute: minute,
         weekday: weekday,
-        monthDay: monthDay);
+        monthDay: monthDay,
+        skipCurrentPeriod: skipCurrentPeriod);
     await _plugin.zonedSchedule(
       id: _reminderId,
       title: title,
@@ -171,8 +184,8 @@ class LocalReminders implements Reminders {
           'expense_reminder',
           tr('Nhắc ghi chi tiêu', 'Expense reminder'),
           channelDescription: tr(
-              'Nhắc khi cả ngày chưa ghi khoản nào',
-              'Reminds you when nothing was logged today'),
+              'Nhắc lúc tối khi cả ngày chưa ghi khoản chi nào',
+              'Evening reminder when no expense was logged today'),
         ),
         iOS: const DarwinNotificationDetails(),
       ),

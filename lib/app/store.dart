@@ -53,7 +53,19 @@ class MonthTotals {
 class AppStore extends ChangeNotifier {
   AppStore(this.core, {this.reminders = const NoReminders()})
       : savings = SavingsCenter(core),
-        budgets = BudgetService(core);
+        budgets = BudgetService(core) {
+    _migrateSettings();
+  }
+
+  /// Bản 1.3 đổi giờ nhắc ghi chi tiêu mặc định từ 21:00 sang 20:00. Người
+  /// dùng cũ vẫn để giờ mặc định thì chuyển theo, một lần duy nhất.
+  void _migrateSettings() {
+    if (core.getSetting('expense_time_migrated') != null) return;
+    if (core.getSetting('expense_reminder_time') == '21:00') {
+      core.setSetting('expense_reminder_time', '20:00');
+    }
+    core.setSetting('expense_time_migrated', '1');
+  }
 
   final FinanceCore core;
   final SavingsCenter savings;
@@ -256,9 +268,9 @@ class AppStore extends ChangeNotifier {
   bool get expenseReminderEnabled =>
       core.getSetting('expense_reminder_enabled') == '1';
 
-  /// Giờ nhắc ghi chi tiêu, mặc định 21:00.
+  /// Giờ nhắc ghi chi tiêu, mặc định 20:00.
   (int, int) get expenseReminderTime =>
-      _time(core.getSetting('expense_reminder_time'), '21:00');
+      _time(core.getSetting('expense_reminder_time'), '20:00');
 
   Future<bool> setExpenseReminder(
       {required bool enabled, int? hour, int? minute}) async {
@@ -272,11 +284,35 @@ class AppStore extends ChangeNotifier {
     return true;
   }
 
-  /// Hôm nay đã ghi giao dịch nào chưa (thu, chi hay chuyển đều tính).
-  bool hasTransactionOn(DateTime day) => core.db.select(
-      'SELECT 1 FROM transactions WHERE deleted_at IS NULL '
-      'AND transaction_date = ? LIMIT 1',
+  /// Ngày [day] đã ghi khoản CHI nào chưa. Khoản thu, chuyển ví hay góp tiết
+  /// kiệm không tính, vì nhắc này là để không quên ghi chi tiêu.
+  bool hasExpenseOn(DateTime day) => core.db.select(
+      "SELECT 1 FROM transactions WHERE deleted_at IS NULL "
+      "AND type = 'EXPENSE' AND transaction_date = ? LIMIT 1",
       [dateKey(day)]).isNotEmpty;
+
+  /// Kỳ chứa [now] (hôm nay, tuần thứ Hai–Chủ nhật, hoặc tháng, theo
+  /// [frequency]) đã có lần góp tiền vào ví tiết kiệm nào chưa.
+  bool hasSavedInPeriod(DateTime now, String frequency) {
+    final day = DateTime(now.year, now.month, now.day);
+    final (DateTime start, DateTime end) = switch (frequency) {
+      'weekly' => (
+          DateTime(day.year, day.month, day.day - (day.weekday - 1)),
+          DateTime(day.year, day.month, day.day + (7 - day.weekday)),
+        ),
+      'monthly' => (
+          DateTime(day.year, day.month, 1),
+          DateTime(day.year, day.month + 1, 0),
+        ),
+      _ => (day, day),
+    };
+    return core.db.select(
+        "SELECT 1 FROM transactions t JOIN wallets w "
+        "ON w.id = t.destination_wallet_id "
+        "WHERE t.deleted_at IS NULL AND w.type = 'SAVINGS' "
+        "AND t.transaction_date BETWEEN ? AND ? LIMIT 1",
+        [dateKey(start), dateKey(end)]).isNotEmpty;
+  }
 
   /// Đặt lại các thông báo theo cài đặt và số liệu mới nhất.
   Future<void> syncReminder() async {
@@ -346,6 +382,7 @@ class AppStore extends ChangeNotifier {
       minute: minute,
       weekday: reminderWeekday,
       monthDay: reminderMonthDay,
+      skipCurrentPeriod: hasSavedInPeriod(DateTime.now(), frequency),
       title: title,
       body: body,
     );
@@ -360,8 +397,9 @@ class AppStore extends ChangeNotifier {
     await reminders.scheduleExpenseCheck(
       hour: hour,
       minute: minute,
-      skipToday: hasTransactionOn(DateTime.now()),
-      title: tr('Hôm nay bạn chưa ghi khoản nào', 'Nothing logged today'),
+      skipToday: hasExpenseOn(DateTime.now()),
+      title: tr('Hôm nay bạn chưa ghi khoản chi nào',
+          'No expenses logged today'),
       body: tr('Ghi lại chi tiêu hôm nay chỉ mất vài giây.',
           'Logging today\'s spending only takes a few seconds.'),
     );
@@ -501,6 +539,64 @@ class AppStore extends ChangeNotifier {
   List<TransactionView> transactions({String? monthPrefix, int? limit}) =>
       core.transactions(monthPrefix: monthPrefix, limit: limit);
 
+  /// Danh mục xếp theo số lần dùng gần đây, hay dùng nhất đứng đầu. Danh mục
+  /// chưa dùng giữ thứ tự sẵn có.
+  List<CategoryInfo> categoriesByUsage(String type) {
+    final list = core.categories(type);
+    final counts = <String, int>{};
+    for (final tx in core.transactions(limit: 300)) {
+      final id = tx.categoryId;
+      if (tx.type == type && id != null) counts[id] = (counts[id] ?? 0) + 1;
+    }
+    final order = {for (var i = 0; i < list.length; i++) list[i].id: i};
+    return list.toList()
+      ..sort((a, b) {
+        final byCount = (counts[b.id] ?? 0).compareTo(counts[a.id] ?? 0);
+        return byCount != 0 ? byCount : order[a.id]!.compareTo(order[b.id]!);
+      });
+  }
+
+  /// Ví nên chọn sẵn cho loại giao dịch [type]: ví của lần ghi gần nhất cùng
+  /// loại, nếu không có thì ví chi tiêu đầu tiên.
+  String? suggestedWalletId(String type) {
+    final wallets = spendingWallets();
+    if (wallets.isEmpty) return null;
+    final ids = {for (final w in wallets) w.id};
+    for (final tx in core.transactions(limit: 50)) {
+      if (tx.type != type || tx.isSavingsMove) continue;
+      final id =
+          type == 'INCOME' ? tx.destinationWalletId : tx.sourceWalletId;
+      if (id != null && ids.contains(id)) return id;
+    }
+    return wallets.first.id;
+  }
+
+  /// Tối đa 3 số tiền hay ghi nhất với loại [type] (ưu tiên danh mục
+  /// [categoryId]) và loại tiền [currency].
+  List<int> frequentAmounts(String type, String? categoryId, String currency) {
+    final inCategory = <int, int>{};
+    final inType = <int, int>{};
+    for (final tx in core.transactions(limit: 300)) {
+      if (tx.type != type || tx.isSavingsMove || tx.currency != currency) {
+        continue;
+      }
+      inType[tx.amountMinor] = (inType[tx.amountMinor] ?? 0) + 1;
+      if (categoryId != null && tx.categoryId == categoryId) {
+        inCategory[tx.amountMinor] = (inCategory[tx.amountMinor] ?? 0) + 1;
+      }
+    }
+    List<int> top(Map<int, int> counts) => (counts.entries.toList()
+          ..sort((a, b) => b.value.compareTo(a.value)))
+        .map((e) => e.key)
+        .toList();
+    final result = <int>[...top(inCategory)];
+    for (final amount in top(inType)) {
+      if (result.length >= 3) break;
+      if (!result.contains(amount)) result.add(amount);
+    }
+    return result.take(3).toList();
+  }
+
   // ------------------------------------------------------------- Ghi
 
   /// Mã dùng một lần cho mỗi lần mở màn hình nhập, để bấm Lưu nhiều lần chỉ
@@ -513,7 +609,7 @@ class AppStore extends ChangeNotifier {
     return buffer.toString();
   }
 
-  void addIncome({
+  String addIncome({
     required String requestId,
     required String walletId,
     required int amountMinor,
@@ -521,7 +617,7 @@ class AppStore extends ChangeNotifier {
     String? categoryId,
     String? note,
   }) {
-    core.addIncome(
+    final id = core.addIncome(
         requestId: requestId,
         walletId: walletId,
         amountMinor: amountMinor,
@@ -530,9 +626,10 @@ class AppStore extends ChangeNotifier {
         note: note);
     notifyListeners();
     unawaited(syncReminder());
+    return id;
   }
 
-  void addExpense({
+  String addExpense({
     required String requestId,
     required String walletId,
     required int amountMinor,
@@ -540,7 +637,7 @@ class AppStore extends ChangeNotifier {
     String? categoryId,
     String? note,
   }) {
-    core.addExpense(
+    final id = core.addExpense(
         requestId: requestId,
         walletId: walletId,
         amountMinor: amountMinor,
@@ -549,6 +646,7 @@ class AppStore extends ChangeNotifier {
         note: note);
     notifyListeners();
     unawaited(syncReminder());
+    return id;
   }
 
   /// Sửa một khoản thu, chi hoặc chuyển ví thường.
@@ -571,7 +669,7 @@ class AppStore extends ChangeNotifier {
           categoryId: categoryId,
           note: note));
 
-  void transfer({
+  String transfer({
     required String requestId,
     required String fromWalletId,
     required String toWalletId,
@@ -580,7 +678,7 @@ class AppStore extends ChangeNotifier {
     int? destinationAmountMinor,
     String? note,
   }) {
-    core.transfer(
+    final id = core.transfer(
         requestId: requestId,
         fromWalletId: fromWalletId,
         toWalletId: toWalletId,
@@ -590,6 +688,7 @@ class AppStore extends ChangeNotifier {
         note: note);
     notifyListeners();
     unawaited(syncReminder());
+    return id;
   }
 
   void deleteTransaction(String transactionId) {

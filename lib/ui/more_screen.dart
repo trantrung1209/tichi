@@ -333,8 +333,8 @@ class MoreScreen extends StatelessWidget {
               color: 'pink',
               title: tr('Nhắc khi cả ngày chưa ghi', 'Remind if nothing logged'),
               subtitle: store.expenseReminderEnabled
-                  ? tr('Lúc $expenseTimeText, chỉ khi hôm đó chưa ghi khoản nào',
-                      'At $expenseTimeText, only on days with nothing logged')
+                  ? tr('Lúc $expenseTimeText, chỉ khi hôm đó chưa ghi khoản chi nào',
+                      'At $expenseTimeText, only on days with no expenses logged')
                   : tr('Đang tắt', 'Off'),
               trailing: Switch(
                 key: const Key('expense-reminder-switch'),
